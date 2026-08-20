@@ -15,6 +15,7 @@ All notable changes to OpenStation Neighborhoods are recorded here. The project 
 
 ### Changed
 
+- Saved sessions no longer wait on a redundant Matrix profile lookup, and slow read receipts no longer block message hydration.
 - Saved-tab restoration now reports real progress, opens recovery details after ten seconds, and no longer waits for avatar media before entering the neighborhood.
 - HTML responses opt out of edge rewriting so analytics beacons cannot be injected into the token-bearing app shell.
 - Forward synchronization now drains Beeper's newest cursors and reconciles remote deletion tombstones.

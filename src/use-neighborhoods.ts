@@ -298,29 +298,31 @@ export function useNeighborhoods(): NeighborhoodsController {
         const receiptKey = `${generation}:${channel.id}:${newest.id}`;
         if (readReceiptRequestsRef.current.has(receiptKey)) return;
         readReceiptRequestsRef.current.add(receiptKey);
-        try {
-          await client.markRead(channel.beeperChatId, newest.id);
-          if (
-            options.signal?.aborted ||
-            generation !== syncGenerationRef.current ||
-            selectedChannelIdRef.current !== channel.id
-          ) {
-            return;
-          }
-          lastReadMessageRef.current[channel.id] = newest.id;
-          setChannels((current) =>
-            current.map((item) =>
-              item.id === channel.id
-                ? { ...item, unreadCount: 0, mentionCount: 0 }
-                : item,
-            ),
-          );
-        } catch (error) {
-          if (isAuthorizationFailure(error)) throw error;
-          // A failed read receipt should not hide otherwise valid messages.
-        } finally {
-          readReceiptRequestsRef.current.delete(receiptKey);
-        }
+        void client.markRead(channel.beeperChatId, newest.id, options.signal)
+          .then(() => {
+            if (
+              options.signal?.aborted ||
+              generation !== syncGenerationRef.current ||
+              selectedChannelIdRef.current !== channel.id
+            ) {
+              return;
+            }
+            lastReadMessageRef.current[channel.id] = newest.id;
+            setChannels((current) =>
+              current.map((item) =>
+                item.id === channel.id
+                  ? { ...item, unreadCount: 0, mentionCount: 0 }
+                  : item,
+              ),
+            );
+          })
+          .catch((error) => {
+            recoverAuthorization(error);
+            // A failed read receipt should not hide or delay otherwise valid messages.
+          })
+          .finally(() => {
+            readReceiptRequestsRef.current.delete(receiptKey);
+          });
       } catch (error) {
         recoverAuthorization(error);
         throw error;
@@ -364,19 +366,9 @@ export function useNeighborhoods(): NeighborhoodsController {
             matrixAccount.statusText || 'Your Beeper account needs attention before OpenStation can connect.',
           );
         }
-        const profilePromise: Promise<{ avatarURL?: string; displayName?: string }> = matrixAccount.user?.id
-          ? client.getUserProfile(matrixAccount.user.id).catch(() => ({}))
-          : Promise.resolve({});
-        const [initialChats, profile] = await Promise.all([chatsPromise, profilePromise]);
+        const initialChats = await chatsPromise;
         setConnection({ kind: 'authorizing', message: 'Rooms found. Fluffing the cushions…' });
-        const matrixIdentity: BeeperAccount = {
-          ...matrixAccount,
-          user: {
-            ...matrixAccount.user,
-            fullName: preferSpecificBeeperName(matrixAccount.user?.fullName, profile.displayName),
-            imgURL: profile.avatarURL || matrixAccount.user?.imgURL,
-          },
-        };
+        const matrixIdentity: BeeperAccount = matrixAccount;
         const initiallyMapped = mapBeeperChatsToChannels(
           flattenChannels(),
           initialChats,

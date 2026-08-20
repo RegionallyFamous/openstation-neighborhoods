@@ -135,6 +135,76 @@ describe('Neighborhoods connection controller', () => {
     }, '@nick:beeper.com')).toBe('Teddy');
   });
 
+  it('restores from Beeper account data without waiting on a Matrix profile lookup', async () => {
+    sessionStorage.setItem(ACCESS_TOKEN_KEY, 'valid-synthetic-token');
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/v1/info') {
+        return jsonResponse(beeperInfoV5);
+      }
+      if (url.pathname === '/oauth/introspect') {
+        return jsonResponse({ active: true });
+      }
+      if (url.pathname === '/v1/accounts') {
+        return jsonResponse([{
+          accountID: 'matrix',
+          bridge: { id: 'matrix', provider: 'cloud', type: 'matrix' },
+          network: 'Beeper',
+          status: 'connected',
+          user: {
+            id: '@teddy:beeper.com',
+            username: 'teddy:beeper.com',
+            fullName: 'Teddy',
+            isSelf: true,
+          },
+        }]);
+      }
+      const chatMatch = url.pathname.match(/^\/v1\/chats\/([^/]+)$/);
+      if (chatMatch) {
+        const roomID = decodeURIComponent(chatMatch[1]);
+        return jsonResponse({
+          id: roomID,
+          accountID: 'matrix',
+          network: 'Beeper',
+          title: 'OpenStation room',
+          unreadCount: 0,
+          unreadMentionsCount: 0,
+          participants: { items: [], hasMore: false, total: 0 },
+        });
+      }
+      if (/^\/v1\/chats\/[^/]+\/messages$/.test(url.pathname)) {
+        return jsonResponse({
+          items: [],
+          hasMore: false,
+          oldestCursor: null,
+          newestCursor: null,
+        });
+      }
+      throw new Error(`Unexpected Beeper request: ${url.pathname}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    let controller: NeighborhoodsController | null = null;
+    function Harness() {
+      controller = useNeighborhoods();
+      return null;
+    }
+
+    await act(async () => root?.render(createElement(Harness)));
+    await flushReactUntil(
+      () => controller?.connection.kind === 'connected' && !controller.isBusy,
+    );
+
+    expect(controller?.connection).toMatchObject({
+      kind: 'connected',
+      accountName: 'Teddy',
+      accountHandle: '@teddy',
+    });
+    expect(fetchMock.mock.calls.some(([input]) =>
+      String(input).includes('/_matrix/client/v3/profile/'),
+    )).toBe(false);
+  });
+
   it('clears a stale 401 token and returns to a reconnectable state', async () => {
     sessionStorage.setItem(ACCESS_TOKEN_KEY, 'stale-synthetic-token');
     sessionStorage.setItem(OAUTH_STATE_KEY, 'stale-synthetic-state');
@@ -386,4 +456,11 @@ function memoryStorage(): Storage {
       entries.set(key, value);
     },
   };
+}
+
+function jsonResponse(value: unknown): Response {
+  return new Response(JSON.stringify(value), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
