@@ -6,8 +6,7 @@ dist/
 .env
 .env.*
 !.env.example
-.spacefast/state.json
-.spacefast/space.json
+.spacefast/
 /.spacefast-*
 .spacefast/.spacefast-*
 .spacefast/.space-link-*.tmp
