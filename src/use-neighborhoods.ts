@@ -207,7 +207,13 @@ export function useNeighborhoods(): NeighborhoodsController {
         if (!matrixAccount) {
           throw new Error('Beeper is running, but its Matrix account was not available.');
         }
-        const matrixAvatarURL = await resolveAvatarURL(client, matrixAccount.user?.imgURL);
+        const profile: { avatarURL?: string; displayName?: string } = matrixAccount.user?.id
+          ? await client.getUserProfile(matrixAccount.user.id).catch(() => ({}))
+          : {};
+        const matrixAvatarURL = await resolveAvatarURL(
+          client,
+          profile.avatarURL || matrixAccount.user?.imgURL,
+        );
         const initiallyMapped = mapBeeperChatsToChannels(
           flattenChannels(),
           initialChats,

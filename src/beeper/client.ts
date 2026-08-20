@@ -66,6 +66,16 @@ export class BeeperClient {
     return accounts;
   }
 
+  async getUserProfile(userID: string): Promise<{ avatarURL?: string; displayName?: string }> {
+    const raw = asRecord(
+      await this.request<unknown>(`/_matrix/client/v3/profile/${encodeURIComponent(userID)}`),
+    );
+    return {
+      avatarURL: normalizeAvatarURL(readString(raw.avatar_url)),
+      displayName: readString(raw.displayname) || undefined,
+    };
+  }
+
   async getChats(options: BeeperChatListOptions = {}): Promise<BeeperChat[]> {
     return (await this.getChatsPage(options)).items;
   }
