@@ -246,7 +246,10 @@ describe('Beeper API v5 adapter', () => {
 
   it('streams Beeper-local assets once and reuses the blob URL', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(new Blob(['avatar'], { type: 'image/png' }), { status: 200 }),
+      new Response(new TextEncoder().encode('avatar'), {
+        status: 200,
+        headers: { 'Content-Type': 'image/png' },
+      }),
     );
     const createObjectURL = vi.fn().mockReturnValue('blob:openstation-avatar');
     const revokeObjectURL = vi.fn();
@@ -298,7 +301,10 @@ describe('Beeper API v5 adapter', () => {
 
   it('fetches loopback image URLs with the bearer token instead of exposing them to img tags', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(new Blob(['avatar'], { type: 'image/png' }), { status: 200 }),
+      new Response(new TextEncoder().encode('avatar'), {
+        status: 200,
+        headers: { 'Content-Type': 'image/png' },
+      }),
     );
     vi.stubGlobal('fetch', fetchMock);
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:authenticated-avatar');
