@@ -29,7 +29,7 @@ export function ChannelSidebar({
     <aside className={`channel-sidebar${mobileOpen ? ' is-mobile-open' : ''}`}>
       <header className="channel-sidebar__header">
         <div>
-          <span className="eyebrow">BEEPER COMMUNITY</span>
+          <span className="eyebrow">BEEPER NEIGHBORHOOD</span>
           <strong>{manifest.name}</strong>
         </div>
       </header>
@@ -85,7 +85,7 @@ export function ChannelSidebar({
         </span>
         <span className="account-dock__identity">
           <strong>{connection.kind === 'connected' ? connection.accountName || 'Beeper neighbor' : 'Not connected'}</strong>
-          <small>{mode === 'beeper' ? 'local Beeper session' : 'No local data loaded'}</small>
+          <small>{connection.kind === 'connected' ? connection.accountHandle || 'Beeper account' : 'No Beeper account connected'}</small>
         </span>
         <button type="button" aria-label="Connection settings" onClick={onOpenConnect}>
           <Settings2 size={16} />

@@ -121,18 +121,28 @@ export function MessageTimeline({
         }}
       >
         <section className="channel-welcome">
-          <div className="channel-welcome__art">
-            <span className="channel-welcome__sun" />
-            <span className="channel-welcome__station"><OpenStationMark /></span>
-            <span className="channel-welcome__wire channel-welcome__wire--one" />
-            <span className="channel-welcome__wire channel-welcome__wire--two" />
+          <div className="channel-welcome__copy">
+            <span className="channel-welcome__eyebrow">
+              OPENSTATION <i aria-hidden="true" /> {channel.categoryName}
+            </span>
+            <div className="channel-welcome__title">
+              <span className="channel-welcome__icon"><Hash size={23} /></span>
+              <h1>#{channel.name}</h1>
+            </div>
+            <p>{channel.topic}</p>
+            <div className="channel-welcome__meta">
+              <span className={mode === 'beeper' && channel.joined ? 'is-live' : ''}>
+                <i aria-hidden="true" />
+                {mode === 'beeper' && channel.joined ? 'Connected with Beeper' : 'Beeper Neighborhood'}
+              </span>
+              <span>{readOnly ? 'Read-only updates' : 'Open conversation'}</span>
+            </div>
           </div>
-          <span className="channel-welcome__icon"><Hash size={27} /></span>
-          <h1>Welcome to #{channel.name}</h1>
-          <p>{channel.topic}</p>
-          <div className="channel-welcome__meta">
-            <span>OpenStation Beeper community</span>
-            <span>{mode === 'beeper' ? 'Your Beeper account' : 'Connect your Beeper account'}</span>
+          <div className="channel-welcome__signal" aria-hidden="true">
+            <span className="channel-welcome__orbit channel-welcome__orbit--outer" />
+            <span className="channel-welcome__orbit channel-welcome__orbit--inner" />
+            <span className="channel-welcome__beacon" />
+            <span className="channel-welcome__station"><OpenStationMark /></span>
           </div>
         </section>
 

@@ -165,7 +165,29 @@ export function useNeighborhoods(): NeighborhoodsController {
 
         const roomMembers = await membersFromBeeperUsers(client, detail.participants);
         if (generation !== syncGenerationRef.current || clientRef.current !== client) return;
-        const self = selfMemberRef.current;
+        let self = selfMemberRef.current;
+        const roomSelfUser = detail.participants.find((participant) =>
+          participant.isSelf || participant.id === self?.id,
+        );
+        const roomSelf = roomSelfUser
+          ? roomMembers.find((member) => member.id === roomSelfUser.id)
+          : undefined;
+        if (roomSelf) {
+          self = {
+            ...roomSelf,
+            role: self?.role ?? roomSelf.role,
+            avatarUrl: roomSelf.avatarUrl || self?.avatarUrl,
+          };
+          selfMemberRef.current = self;
+          setConnection((current) => current.kind === 'connected'
+            ? {
+                ...current,
+                accountName: self?.name,
+                accountHandle: self?.handle,
+                avatarUrl: self?.avatarUrl || current.avatarUrl,
+              }
+            : current);
+        }
         const completeMembers = self && !roomMembers.some((member) => member.id === self.id)
           ? [self, ...roomMembers]
           : roomMembers;
@@ -331,7 +353,7 @@ export function useNeighborhoods(): NeighborhoodsController {
           ...matrixAccount,
           user: {
             ...matrixAccount.user,
-            fullName: matrixAccount.user?.fullName || profile.displayName,
+            fullName: preferSpecificBeeperName(matrixAccount.user?.fullName, profile.displayName),
             imgURL: profile.avatarURL || matrixAccount.user?.imgURL,
           },
         };
@@ -415,10 +437,8 @@ export function useNeighborhoods(): NeighborhoodsController {
                 ? `${joined.length} of ${mapped.length} OpenStation rooms connected automatically`
                 : 'Beeper is connected; the OpenStation rooms are not reachable yet',
           accountName:
-            matrixIdentity.user?.fullName ||
-            (matrixIdentity.user?.username && shortMatrixIdentity(matrixIdentity.user.username)) ||
-            (matrixIdentity.user?.id && shortMatrixIdentity(matrixIdentity.user.id)) ||
-            'Beeper',
+            self.name,
+          accountHandle: self.handle,
           avatarUrl: matrixAvatarURL,
         });
         if (first.beeperChatId) {
@@ -907,10 +927,7 @@ function findMatrixAccount(accounts: BeeperAccount[]): BeeperAccount | undefined
 
 function memberFromMatrixAccount(account: BeeperAccount, avatarUrl?: string): Member {
   const id = account.user?.id || account.user?.username || account.accountID;
-  const name =
-    account.user?.fullName ||
-    (account.user?.username && shortMatrixIdentity(account.user.username)) ||
-    compactHandle(id);
+  const name = resolveBeeperIdentityName(account.user, id);
   return {
     id,
     name,
@@ -932,10 +949,7 @@ async function membersFromBeeperUsers(
     Boolean(user.id) && users.findIndex((candidate) => candidate.id === user.id) === index,
   );
   const resolved = await mapWithConcurrency(distinctUsers, 6, async (user) => {
-    const name =
-      user.fullName ||
-      (user.username && shortMatrixIdentity(user.username)) ||
-      compactHandle(user.id);
+    const name = resolveBeeperIdentityName(user, user.id);
     const avatarUrl = await client.resolveAssetURL(user.imgURL).catch(() => undefined);
     return {
       id: user.id,
@@ -961,9 +975,7 @@ async function toCommunityMessage(
   const knownAuthor = knownMembers.find((member) => member.id === message.senderID);
   const name =
     knownAuthor?.name ||
-    message.sender?.fullName ||
-    message.sender?.username ||
-    compactHandle(message.senderID);
+    resolveBeeperIdentityName(message.sender, message.senderID);
   const avatarUrl = knownAuthor?.avatarUrl || await client
     .resolveAssetURL(message.sender?.imgURL)
     .catch(() => undefined);
@@ -1094,6 +1106,26 @@ async function mapWithConcurrency<T, R>(
 
 function compactHandle(value: string): string {
   return value.replace(/^@/, '').split(':')[0] || 'Neighbor';
+}
+
+export function resolveBeeperIdentityName(
+  user: { fullName?: string; username?: string; id?: string } | undefined,
+  fallbackID: string,
+): string {
+  const preferred = preferSpecificBeeperName(user?.fullName);
+  if (preferred) return preferred;
+  if (user?.username) return compactHandle(shortMatrixIdentity(user.username));
+  if (user?.id) return compactHandle(shortMatrixIdentity(user.id));
+  return compactHandle(fallbackID);
+}
+
+function preferSpecificBeeperName(...values: Array<string | undefined>): string | undefined {
+  const names = values.map((value) => value?.trim()).filter((value): value is string => Boolean(value));
+  return names.find((value) => !isGenericBeeperName(value));
+}
+
+function isGenericBeeperName(value: string): boolean {
+  return /^(?:beeper(?: user| account)?|matrix(?: user| account)?)$/i.test(value.trim());
 }
 
 function shortMatrixIdentity(value: string): string {

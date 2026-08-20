@@ -86,7 +86,7 @@ export type ConnectionState =
   | { kind: 'probing'; message: string }
   | { kind: 'available'; message: string }
   | { kind: 'authorizing'; message: string }
-  | { kind: 'connected'; message: string; accountName?: string; avatarUrl?: string }
+  | { kind: 'connected'; message: string; accountName?: string; accountHandle?: string; avatarUrl?: string }
   | { kind: 'unavailable'; message: string }
   | { kind: 'error'; message: string };
 

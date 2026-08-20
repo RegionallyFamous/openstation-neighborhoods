@@ -33,7 +33,7 @@ export function ProvisionPanel({
       setError(
         provisionError instanceof Error
           ? provisionError.message
-          : 'The community could not be provisioned.',
+          : 'The Beeper Neighborhood could not be created.',
       );
     } finally {
       setProvisioning(false);
@@ -56,7 +56,7 @@ export function ProvisionPanel({
         <span><RadioTower size={20} /></span>
         <div>
           <small>ADMIN SETUP</small>
-          <strong>Beeper community provisioner</strong>
+          <strong>Beeper Neighborhood provisioner</strong>
         </div>
       </header>
       {result ? (

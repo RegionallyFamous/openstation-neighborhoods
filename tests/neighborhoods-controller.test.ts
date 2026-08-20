@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConnectPanel } from '../src/components/ConnectPanel';
 import {
   useNeighborhoods,
+  resolveBeeperIdentityName,
   type NeighborhoodsController,
 } from '../src/use-neighborhoods';
 import { invalidTokenV5 } from './fixtures/beeper-v5';
@@ -45,6 +46,20 @@ afterEach(async () => {
 });
 
 describe('Neighborhoods connection controller', () => {
+  it('uses a real Beeper handle instead of the generic account placeholder', () => {
+    expect(resolveBeeperIdentityName({
+      id: '@nick:beeper.com',
+      username: '@nick:beeper.com',
+      fullName: 'Beeper User',
+    }, '@nick:beeper.com')).toBe('nick');
+
+    expect(resolveBeeperIdentityName({
+      id: '@nick:beeper.com',
+      username: '@nick:beeper.com',
+      fullName: 'Teddy',
+    }, '@nick:beeper.com')).toBe('Teddy');
+  });
+
   it('clears a stale 401 token and returns to a reconnectable state', async () => {
     sessionStorage.setItem(ACCESS_TOKEN_KEY, 'stale-synthetic-token');
     sessionStorage.setItem(OAUTH_STATE_KEY, 'stale-synthetic-state');

@@ -154,10 +154,10 @@ export function ConnectPanel({
           <img src="/assets/openstation-onboarding-hero-v2.png" alt="" />
           <span>BEEPER IDENTITY</span>
           <i />
-          <span>BEEPER COMMUNITY</span>
+          <span>BEEPER NEIGHBORHOOD</span>
         </div>
 
-        <p className="connect-panel__intro">Open Beeper Desktop, approve OpenStation once, and you’ll be inside the community.</p>
+        <p className="connect-panel__intro">Open Beeper Desktop, approve OpenStation once, and you’ll be inside the neighborhood.</p>
 
         <div
           className={`connection-readout connection-readout--${connection.kind}`}
@@ -182,7 +182,7 @@ export function ConnectPanel({
             <span><Radio size={23} /></span>
             <div>
               <h2>You are connected.</h2>
-              <p>OpenStation automatically adds its community rooms through your local Beeper app, then loads their real messages and members.</p>
+              <p>OpenStation automatically adds its neighborhood rooms through your local Beeper app, then loads their real messages and members.</p>
             </div>
             <button type="button" onClick={onDisconnect}>DISCONNECT</button>
           </div>

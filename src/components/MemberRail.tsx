@@ -1,6 +1,5 @@
-import { CircleHelp, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import type { Member } from '../types';
-import { PoweredByBeeper } from './PoweredByBeeper';
 
 interface MemberRailProps {
   members: Member[];
@@ -20,14 +19,11 @@ export function MemberRail({ members, open, onClose }: MemberRailProps) {
     <aside className={`member-rail${open ? ' is-open' : ''}`}>
       <header className="member-rail__header">
         <div>
-          <span className="eyebrow">COMMUNITY DIRECTORY</span>
+          <span className="eyebrow">NEIGHBORHOOD DIRECTORY</span>
           <strong>{members.length ? `${members.length} known neighbors` : 'Directory not loaded'}</strong>
         </div>
         <button type="button" aria-label="Close members" onClick={onClose}><X size={18} /></button>
       </header>
-      <div className="member-rail__actions" aria-hidden="true">
-        <span className="eyebrow">IDENTITIES RETURNED BY BEEPER</span>
-      </div>
       <div className="member-rail__scroll">
         {!members.length && (
           <section className="empty-channel">
@@ -57,11 +53,20 @@ export function MemberRail({ members, open, onClose }: MemberRailProps) {
         })}
       </div>
       <footer className="member-rail__footer">
-        <span className="member-rail__footer-note">
-          <CircleHelp size={17} />
-          <span><strong>Community directory.</strong><small>These are identities returned by joined OpenStation rooms, not live presence.</small></span>
+        <span className="member-rail__source">
+          <i aria-hidden="true" />
+          <span><strong>Room members</strong><small>Synced from Beeper · presence hidden</small></span>
         </span>
-        <PoweredByBeeper compact />
+        <a
+          className="member-rail__beeper"
+          href="https://www.beeper.com/"
+          target="_blank"
+          rel="noreferrer"
+          aria-label="Powered by Beeper"
+        >
+          <span>POWERED BY</span>
+          <img src="/brand/beeper-wordmark.svg" alt="Beeper" />
+        </a>
       </footer>
     </aside>
   );
