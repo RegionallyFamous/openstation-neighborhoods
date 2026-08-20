@@ -36,6 +36,7 @@ export interface CommunityChannel extends ChannelDefinition {
   mentionCount: number;
   beeperChatId?: string;
   joined: boolean;
+  isReadOnly?: boolean;
 }
 
 export type Presence = 'online' | 'idle' | 'offline' | 'unknown';
@@ -74,6 +75,8 @@ export interface CommunityMessage {
   sentAt: string;
   edited?: boolean;
   pending?: boolean;
+  delivery?: 'pending' | 'sent' | 'failed' | 'unconfirmed';
+  deliveryMessage?: string;
   reactions: Reaction[];
   attachments: MessageAttachment[];
 }

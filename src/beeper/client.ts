@@ -8,6 +8,7 @@ import type {
   BeeperMessage,
   BeeperMessageListOptions,
   BeeperReaction,
+  BeeperSendStatus,
   BeeperUser,
 } from './types';
 
@@ -47,6 +48,8 @@ export class BeeperClient {
   readonly baseUrl: string;
   private readonly token?: string;
   private selfUserID?: string;
+  private readonly assetURLCache = new Map<string, Promise<string | undefined>>();
+  private readonly blobURLs = new Set<string>();
 
   constructor(options: { baseUrl?: string; token?: string } = {}) {
     this.baseUrl = normalizeBeeperBaseUrl(options.baseUrl || DEFAULT_BEEPER_API_BASE);
@@ -78,6 +81,21 @@ export class BeeperClient {
 
   async getChats(options: BeeperChatListOptions = {}): Promise<BeeperChat[]> {
     return (await this.getChatsPage(options)).items;
+  }
+
+  async getChat(chatID: string, maxParticipantCount = -1): Promise<BeeperChat> {
+    const params = new URLSearchParams({
+      maxParticipantCount: String(maxParticipantCount),
+    });
+    const raw = await this.request<unknown>(
+      withQuery(`/v1/chats/${encodeURIComponent(chatID)}`, params),
+    );
+    const record = asRecord(raw);
+    const chat = normalizeChat(record.chat ?? record);
+    if (!chat) {
+      throw new BeeperApiError('Beeper returned incomplete room details.', 502);
+    }
+    return chat;
   }
 
   async getChatsPage(
@@ -118,6 +136,21 @@ export class BeeperClient {
     );
     page.items.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
     return page;
+  }
+
+  async getMessage(chatID: string, messageID: string): Promise<BeeperMessage> {
+    const raw = await this.request<unknown>(
+      `/v1/chats/${encodeURIComponent(chatID)}/messages/${encodeURIComponent(messageID)}`,
+    );
+    const record = asRecord(raw);
+    const message = normalizeMessage(
+      record.message ?? record,
+      this.selfUserID,
+    );
+    if (!message) {
+      throw new BeeperApiError('Beeper returned an incomplete message.', 502);
+    }
+    return message;
   }
 
   async joinRoom(roomIDOrAlias: string): Promise<string> {
@@ -192,6 +225,32 @@ export class BeeperClient {
     );
   }
 
+  async deleteReaction(
+    chatID: string,
+    messageID: string,
+    reactionKey: string,
+  ): Promise<void> {
+    await this.request(
+      `/v1/chats/${encodeURIComponent(chatID)}/messages/${encodeURIComponent(messageID)}/reactions/${encodeURIComponent(reactionKey)}`,
+      { method: 'DELETE' },
+    );
+  }
+
+  resolveAssetURL(value: string | undefined): Promise<string | undefined> {
+    const assetURL = value?.trim();
+    if (!assetURL) return Promise.resolve(undefined);
+
+    const cached = this.assetURLCache.get(assetURL);
+    if (cached) return cached;
+
+    const request = this.resolveAssetURLUncached(assetURL).catch((error) => {
+      this.assetURLCache.delete(assetURL);
+      throw error;
+    });
+    this.assetURLCache.set(assetURL, request);
+    return request;
+  }
+
   async getAssetBlobURL(value: string): Promise<string> {
     const assetURL = value.trim();
     if (!/^(?:mxc|localmxc|file):\/\//i.test(assetURL)) {
@@ -201,8 +260,37 @@ export class BeeperClient {
       `/v1/assets/serve?url=${encodeURIComponent(assetURL)}`,
       { responseType: 'raw' },
     );
+    return this.responseToBlobURL(response);
+  }
+
+  dispose(): void {
+    this.blobURLs.forEach((url) => URL.revokeObjectURL(url));
+    this.blobURLs.clear();
+    this.assetURLCache.clear();
+  }
+
+  private async resolveAssetURLUncached(value: string): Promise<string | undefined> {
+    if (/^(?:mxc|localmxc|file):\/\//i.test(value)) {
+      return this.getAssetBlobURL(value);
+    }
+    const resourceURL = normalizeResourceURL(value);
+    if (!resourceURL) return undefined;
+    const parsed = new URL(resourceURL);
+    if (parsed.protocol === 'http:') {
+      normalizeBeeperBaseUrl(parsed.origin);
+      const response = await this.request<Response>(`${parsed.pathname}${parsed.search}`, {
+        responseType: 'raw',
+      });
+      return this.responseToBlobURL(response);
+    }
+    return resourceURL;
+  }
+
+  private async responseToBlobURL(response: Response): Promise<string> {
     const blob = await response.blob();
-    return URL.createObjectURL(blob);
+    const blobURL = URL.createObjectURL(blob);
+    this.blobURLs.add(blobURL);
+    return blobURL;
   }
 
   private async request<T = unknown>(
@@ -225,6 +313,9 @@ export class BeeperClient {
       response = await fetch(`${this.baseUrl}${path}`, {
         ...options,
         headers,
+        cache: 'no-store',
+        credentials: 'omit',
+        referrerPolicy: 'no-referrer',
         signal: options.signal ?? AbortSignal.timeout(8_000),
       });
     } catch (error) {
@@ -268,7 +359,7 @@ export function normalizeChat(value: unknown): BeeperChat | null {
     network: readString(raw.network) || 'Beeper',
     title: readString(raw.title) || 'Untitled chat',
     description: readString(raw.description) || undefined,
-    imgURL: normalizeResourceURL(readString(raw.imgURL)),
+    imgURL: normalizeBeeperResourceURL(readString(raw.imgURL)),
     isReadOnly: Boolean(raw.isReadOnly),
     isMuted: Boolean(raw.isMuted),
     isPinned: Boolean(raw.isPinned),
@@ -323,6 +414,8 @@ export function normalizeMessage(
     timestamp,
     text: readString(raw.text, asRecord(raw.content).body) || '',
     isEdited: Boolean(raw.editedTimestamp ?? raw.isEdited ?? raw.edited),
+    linkedMessageID: readString(raw.linkedMessageID) || undefined,
+    sendStatus: normalizeSendStatus(raw.sendStatus),
     attachments,
     reactions,
   };
@@ -387,7 +480,26 @@ function normalizeAttachment(value: unknown): BeeperAttachment {
     type: readString(raw.type) || undefined,
     fileName: readString(raw.fileName, raw.name) || undefined,
     fileSize: readNumber(raw.fileSize) || undefined,
-    srcURL: normalizeResourceURL(readString(raw.srcURL, raw.url)),
+    srcURL: normalizeBeeperResourceURL(readString(raw.srcURL, raw.url)),
+  };
+}
+
+function normalizeSendStatus(value: unknown): BeeperSendStatus | undefined {
+  const raw = asRecord(value);
+  const status = readString(raw.status);
+  const knownStatuses = [
+    'SUCCESS',
+    'PENDING',
+    'FAIL_RETRIABLE',
+    'FAIL_PERMANENT',
+  ] as const;
+  const normalized = knownStatuses.find((candidate) => candidate === status);
+  if (!normalized) return undefined;
+  return {
+    status: normalized,
+    timestamp: readString(raw.timestamp) || undefined,
+    message: readString(raw.message) || undefined,
+    reason: readString(raw.reason) || undefined,
   };
 }
 
@@ -514,6 +626,10 @@ export function normalizeResourceURL(value: string): string | undefined {
 }
 
 function normalizeAvatarURL(value: string): string | undefined {
+  return normalizeBeeperResourceURL(value);
+}
+
+export function normalizeBeeperResourceURL(value: string): string | undefined {
   const candidate = value.trim();
   if (!candidate) return undefined;
   if (/^(?:mxc|localmxc|file):\/\//i.test(candidate)) return candidate;

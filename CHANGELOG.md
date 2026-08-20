@@ -7,6 +7,9 @@ All notable changes to OpenStation Neighborhoods are recorded here. The project 
 ### Added
 
 - Release verification, preview, promotion, and rollback foundations.
+- Complete selected-room participant loading and authenticated Beeper asset streaming for account, member, message-author, and attachment media.
+- Cursor-based older-message loading, deterministic pending-send resolution, send-status feedback, and reaction toggling.
+- OAuth token introspection at connection time and grant revocation on explicit disconnect.
 
 ## 0.1.0 (alpha) - 2026-08-19
 

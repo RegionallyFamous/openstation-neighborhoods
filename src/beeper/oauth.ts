@@ -1,4 +1,9 @@
-import { BeeperClient, DEFAULT_BEEPER_API_BASE } from './client';
+import {
+  BeeperClient,
+  BeeperApiError,
+  DEFAULT_BEEPER_API_BASE,
+  normalizeBeeperBaseUrl,
+} from './client';
 import type {
   BeeperOAuthClientRegistration,
   BeeperOAuthMetadata,
@@ -8,6 +13,10 @@ import type {
 const OAUTH_STATE_KEY = 'openstation-neighborhoods:oauth-state';
 const OAUTH_CLIENT_KEY = 'openstation-neighborhoods:oauth-client';
 const ACCESS_TOKEN_KEY = 'openstation-neighborhoods:access-token';
+const ACCESS_TOKEN_SOURCE_KEY = 'openstation-neighborhoods:access-token-source';
+const ACCESS_TOKEN_EXPIRES_KEY = 'openstation-neighborhoods:access-token-expires';
+
+export type BeeperAccessTokenSource = 'oauth' | 'manual';
 
 interface OAuthPendingState {
   state: string;
@@ -34,11 +43,20 @@ export function getStoredAccessToken(): string | null {
 
 export function storeManualAccessToken(token: string): void {
   sessionStorage.setItem(ACCESS_TOKEN_KEY, token.trim());
+  sessionStorage.setItem(ACCESS_TOKEN_SOURCE_KEY, 'manual');
+  sessionStorage.removeItem(ACCESS_TOKEN_EXPIRES_KEY);
+}
+
+export function getStoredAccessTokenSource(): BeeperAccessTokenSource | null {
+  const source = sessionStorage.getItem(ACCESS_TOKEN_SOURCE_KEY);
+  return source === 'oauth' || source === 'manual' ? source : null;
 }
 
 export function disconnectBeeper(): void {
   oauthCallbackCompletion = null;
   sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+  sessionStorage.removeItem(ACCESS_TOKEN_SOURCE_KEY);
+  sessionStorage.removeItem(ACCESS_TOKEN_EXPIRES_KEY);
   sessionStorage.removeItem(OAUTH_STATE_KEY);
 }
 
@@ -54,8 +72,11 @@ export async function beginBeeperOAuth(
   const info = await client.getInfo();
   const metadata = await discoverOAuthMetadata(baseUrl);
   const redirectURI = `${window.location.origin}${window.location.pathname}`;
-  const registrationEndpoint =
-    metadata.registration_endpoint || info.endpoints.oauth?.registration_endpoint;
+  const registrationEndpoint = validateLocalOAuthEndpoint(
+    metadata.registration_endpoint || info.endpoints.oauth?.registration_endpoint,
+    baseUrl,
+    'registration',
+  );
 
   if (!registrationEndpoint) {
     throw new Error('Beeper did not advertise an OAuth registration endpoint.');
@@ -72,12 +93,22 @@ export async function beginBeeperOAuth(
     state,
     verifier,
     clientID: registeredClient.clientID,
-    tokenEndpoint: metadata.token_endpoint,
+    tokenEndpoint: validateLocalOAuthEndpoint(
+      metadata.token_endpoint,
+      baseUrl,
+      'token',
+    ),
     redirectURI,
   };
   sessionStorage.setItem(OAUTH_STATE_KEY, JSON.stringify(pending));
 
-  const authorizationURL = new URL(metadata.authorization_endpoint);
+  const authorizationURL = new URL(
+    validateLocalOAuthEndpoint(
+      metadata.authorization_endpoint,
+      baseUrl,
+      'authorization',
+    ),
+  );
   authorizationURL.searchParams.set('response_type', 'code');
   authorizationURL.searchParams.set('client_id', registeredClient.clientID);
   authorizationURL.searchParams.set('redirect_uri', redirectURI);
@@ -134,7 +165,12 @@ async function exchangeOAuthCallback(currentURL: URL): Promise<string> {
     redirect_uri: pending.redirectURI,
     code_verifier: pending.verifier,
   });
-  const response = await fetch(pending.tokenEndpoint, {
+  const tokenEndpoint = validateLocalOAuthEndpoint(
+    pending.tokenEndpoint,
+    DEFAULT_BEEPER_API_BASE,
+    'token',
+  );
+  const response = await fetch(tokenEndpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
@@ -144,11 +180,88 @@ async function exchangeOAuthCallback(currentURL: URL): Promise<string> {
     throw new Error(`Beeper could not finish authorization (${response.status}).`);
   }
   const token = (await response.json()) as BeeperTokenResponse;
-  if (!token.access_token) throw new Error('Beeper did not return an access token.');
+  if (!token.access_token || token.token_type?.toLowerCase() !== 'bearer') {
+    throw new Error('Beeper did not return a valid bearer access token.');
+  }
+  if (token.expires_in !== undefined && (!Number.isFinite(token.expires_in) || token.expires_in <= 0)) {
+    throw new Error('Beeper returned an invalid access-token lifetime.');
+  }
 
   sessionStorage.setItem(ACCESS_TOKEN_KEY, token.access_token);
+  sessionStorage.setItem(ACCESS_TOKEN_SOURCE_KEY, 'oauth');
+  if (token.expires_in) {
+    sessionStorage.setItem(
+      ACCESS_TOKEN_EXPIRES_KEY,
+      String(Date.now() + token.expires_in * 1_000),
+    );
+  } else {
+    sessionStorage.removeItem(ACCESS_TOKEN_EXPIRES_KEY);
+  }
   sessionStorage.removeItem(OAUTH_STATE_KEY);
   return token.access_token;
+}
+
+export async function introspectBeeperAccessToken(
+  token: string,
+  advertisedEndpoint?: string,
+  baseUrl = DEFAULT_BEEPER_API_BASE,
+): Promise<boolean> {
+  const endpoint = advertisedEndpoint
+    ? validateLocalOAuthEndpoint(advertisedEndpoint, baseUrl, 'introspection')
+    : validateLocalOAuthEndpoint(
+        (await discoverOAuthMetadata(baseUrl)).introspection_endpoint,
+        baseUrl,
+        'introspection',
+      );
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      token,
+      token_type_hint: 'access_token',
+    }),
+    cache: 'no-store',
+    credentials: 'omit',
+    referrerPolicy: 'no-referrer',
+    signal: AbortSignal.timeout(8_000),
+  });
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new BeeperApiError('Beeper authorization is invalid or expired.', 401, 'unauthorized');
+    }
+    throw new Error(`Beeper could not validate the authorization (${response.status}).`);
+  }
+  const result = (await response.json()) as { active?: unknown };
+  return result.active === true;
+}
+
+export async function revokeBeeperAccessToken(
+  token: string,
+  advertisedEndpoint?: string,
+  baseUrl = DEFAULT_BEEPER_API_BASE,
+): Promise<void> {
+  const endpoint = advertisedEndpoint
+    ? validateLocalOAuthEndpoint(advertisedEndpoint, baseUrl, 'revocation')
+    : validateLocalOAuthEndpoint(
+        (await discoverOAuthMetadata(baseUrl)).revocation_endpoint,
+        baseUrl,
+        'revocation',
+      );
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      token,
+      token_type_hint: 'access_token',
+    }),
+    cache: 'no-store',
+    credentials: 'omit',
+    referrerPolicy: 'no-referrer',
+    signal: AbortSignal.timeout(8_000),
+  });
+  if (!response.ok) {
+    throw new Error(`Beeper could not revoke the authorization (${response.status}).`);
+  }
 }
 
 export async function createCodeChallenge(verifier: string): Promise<string> {
@@ -166,6 +279,29 @@ async function discoverOAuthMetadata(baseUrl: string): Promise<BeeperOAuthMetada
     throw new Error(`Beeper OAuth discovery failed (${response.status}).`);
   }
   return (await response.json()) as BeeperOAuthMetadata;
+}
+
+function validateLocalOAuthEndpoint(
+  value: string | undefined,
+  baseUrl: string,
+  label: string,
+): string {
+  if (!value) throw new Error(`Beeper did not advertise an OAuth ${label} endpoint.`);
+  normalizeBeeperBaseUrl(baseUrl);
+  let endpoint: URL;
+  try {
+    endpoint = new URL(value);
+  } catch {
+    throw new Error(`Beeper advertised an invalid OAuth ${label} endpoint.`);
+  }
+  if (
+    normalizeBeeperBaseUrl(endpoint.origin) !== endpoint.origin ||
+    endpoint.username ||
+    endpoint.password
+  ) {
+    throw new Error(`Beeper advertised an unsafe OAuth ${label} endpoint.`);
+  }
+  return endpoint.href;
 }
 
 async function registerClient(

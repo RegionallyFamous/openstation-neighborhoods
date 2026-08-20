@@ -9,6 +9,7 @@ import {
 } from '../src/beeper/client';
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -183,6 +184,113 @@ describe('Beeper API v5 adapter', () => {
       'http://localhost:23373/v1/chats/!general%3Abeeper.com/messages?cursor=next%7Cpage&direction=before',
       expect.any(Object),
     );
+  });
+
+  it('retrieves complete room details with all participants', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        id: '!general:beeper.com',
+        accountID: 'matrix',
+        network: 'Beeper',
+        title: 'OpenStation · General',
+        isReadOnly: true,
+        participants: {
+          items: [
+            {
+              id: '@nick:beeper.com',
+              fullName: 'Nick',
+              imgURL: 'mxc://beeper.com/avatar',
+            },
+          ],
+          hasMore: false,
+          total: 1,
+        },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      new BeeperClient({ token: 'test-token' }).getChat('!general:beeper.com'),
+    ).resolves.toMatchObject({
+      isReadOnly: true,
+      participants: [{ imgURL: 'mxc://beeper.com/avatar' }],
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:23373/v1/chats/!general%3Abeeper.com?maxParticipantCount=-1',
+      expect.any(Object),
+    );
+  });
+
+  it('retrieves send status and removes an existing reaction', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          id: '$message',
+          chatID: '!general:beeper.com',
+          senderID: '@nick:beeper.com',
+          timestamp: '2026-08-19T12:00:00Z',
+          text: 'Delivered',
+          sendStatus: {
+            status: 'SUCCESS',
+            timestamp: '2026-08-19T12:00:01Z',
+          },
+        }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new BeeperClient({ token: 'test-token' });
+    await expect(
+      client.getMessage('!general:beeper.com', 'pending|message'),
+    ).resolves.toMatchObject({ sendStatus: { status: 'SUCCESS' } });
+    await client.deleteReaction('!general:beeper.com', '$message', '✨');
+
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      'http://localhost:23373/v1/chats/!general%3Abeeper.com/messages/%24message/reactions/%E2%9C%A8',
+    );
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: 'DELETE' });
+  });
+
+  it('streams Beeper-local assets once and reuses the blob URL', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(new Blob(['avatar'], { type: 'image/png' }), { status: 200 }),
+    );
+    const createObjectURL = vi.fn().mockReturnValue('blob:openstation-avatar');
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(URL, 'createObjectURL').mockImplementation(createObjectURL);
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(revokeObjectURL);
+
+    const client = new BeeperClient({ token: 'test-token' });
+    await expect(client.resolveAssetURL('mxc://beeper.com/avatar')).resolves.toBe(
+      'blob:openstation-avatar',
+    );
+    await expect(client.resolveAssetURL('mxc://beeper.com/avatar')).resolves.toBe(
+      'blob:openstation-avatar',
+    );
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(String(fetchMock.mock.calls[0][0])).toContain(
+      '/v1/assets/serve?url=mxc%3A%2F%2Fbeeper.com%2Favatar',
+    );
+
+    client.dispose();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:openstation-avatar');
+  });
+
+  it('fetches loopback image URLs with the bearer token instead of exposing them to img tags', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(new Blob(['avatar'], { type: 'image/png' }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:authenticated-avatar');
+
+    const client = new BeeperClient({ token: 'test-token' });
+    await expect(
+      client.resolveAssetURL('http://127.0.0.1:23373/v1/assets/serve?url=file%3A%2F%2Favatar'),
+    ).resolves.toBe('blob:authenticated-avatar');
+    const [, init] = fetchMock.mock.calls[0];
+    expect((init?.headers as Headers).get('Authorization')).toBe('Bearer test-token');
   });
 
   it('uses the Matrix account identity to identify the user\'s own reactions', async () => {

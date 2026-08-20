@@ -101,6 +101,19 @@ export interface BeeperReaction {
   participantIDs: string[];
 }
 
+export type BeeperSendStatusKind =
+  | 'SUCCESS'
+  | 'PENDING'
+  | 'FAIL_RETRIABLE'
+  | 'FAIL_PERMANENT';
+
+export interface BeeperSendStatus {
+  status: BeeperSendStatusKind;
+  timestamp?: string;
+  message?: string;
+  reason?: string;
+}
+
 export interface BeeperMessage {
   id: string;
   chatID: string;
@@ -109,6 +122,8 @@ export interface BeeperMessage {
   timestamp: string;
   text: string;
   isEdited: boolean;
+  linkedMessageID?: string;
+  sendStatus?: BeeperSendStatus;
   attachments: BeeperAttachment[];
   reactions: BeeperReaction[];
 }
@@ -137,6 +152,7 @@ export interface BeeperOAuthMetadata {
   authorization_endpoint: string;
   token_endpoint: string;
   registration_endpoint?: string;
+  introspection_endpoint?: string;
   revocation_endpoint?: string;
   scopes_supported?: string[];
   code_challenge_methods_supported?: string[];

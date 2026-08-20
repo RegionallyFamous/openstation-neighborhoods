@@ -2,11 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   completeBeeperOAuthCallback,
   createCodeChallenge,
+  introspectBeeperAccessToken,
   invalidateBeeperAuthorization,
+  revokeBeeperAccessToken,
 } from '../src/beeper/oauth';
 
 describe('Beeper OAuth PKCE', () => {
   beforeEach(() => {
+    sessionStorage.clear();
     const entries = new Map<string, string>();
     const storage: Storage = {
       get length() {
@@ -59,5 +62,39 @@ describe('Beeper OAuth PKCE', () => {
     expect(sessionStorage.getItem('openstation-neighborhoods:access-token')).toBeNull();
     expect(sessionStorage.getItem('openstation-neighborhoods:oauth-state')).toBeNull();
     expect(window.localStorage.getItem('openstation-neighborhoods:oauth-client')).toBeNull();
+  });
+
+  it('introspects an access token using Beeper OAuth metadata', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ active: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      introspectBeeperAccessToken(
+        'approved-token',
+        'http://127.0.0.1:23373/oauth/introspect',
+      ),
+    ).resolves.toBe(true);
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init?.method).toBe('POST');
+    expect(String(init?.body)).toContain('token=approved-token');
+  });
+
+  it('revokes an OAuth token through the advertised local endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await revokeBeeperAccessToken(
+      'approved-token',
+      'http://127.0.0.1:23373/oauth/revoke',
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:23373/oauth/revoke',
+      expect.objectContaining({ method: 'POST' }),
+    );
   });
 });

@@ -164,8 +164,11 @@ export default function App() {
           messages={neighborhoods.messages}
           mode={neighborhoods.mode}
           isBusy={neighborhoods.isBusy}
+          canLoadOlder={neighborhoods.canLoadOlder}
+          isLoadingOlder={neighborhoods.isLoadingOlder}
           onSend={neighborhoods.sendMessage}
           onReact={neighborhoods.addReaction}
+          onLoadOlder={neighborhoods.loadOlderMessages}
           onOpenChannels={toggleChannels}
           onToggleMembers={toggleMembers}
           onOpenConnect={() => setConnectOpen(true)}

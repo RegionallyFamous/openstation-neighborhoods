@@ -60,7 +60,7 @@ npm run check
 3. Open the connection panel in Neighborhoods.
 4. Choose **Connect with Beeper** and approve the local read/write request Beeper shows.
 
-OAuth access tokens are stored in `sessionStorage`, so closing the browser session clears the token. A stale or revoked token returns the app to a reconnectable authorization state. Neighborhoods never asks Beeper to listen beyond the loopback interface.
+OAuth access tokens are stored in `sessionStorage`, introspected before a live session starts, and revoked through Beeper when a user explicitly disconnects. Closing the browser session clears the local token. A stale or revoked token returns the app to a reconnectable authorization state. Neighborhoods never asks Beeper to listen beyond the loopback interface.
 
 For development builds, **Use a manual token instead** accepts a token created in Beeper's integration settings. It is not part of the public member journey. Do not commit tokens to this repository or put them in Vite environment variables.
 
@@ -86,7 +86,7 @@ Beeper Desktop API
 OpenStation Matrix Space and rooms
 ```
 
-The client uses serialized, visibility-aware HTTP synchronization for the selected room, with backoff when Beeper is unavailable. Beeper also exposes an experimental WebSocket API, but normal browser WebSockets cannot attach its required `Authorization` header, so the hosted client uses the documented HTTP endpoints.
+The client uses serialized, visibility-aware HTTP synchronization for the selected room, with backoff when Beeper is unavailable. It retrieves complete room participants, streams Beeper-local avatars and attachments through the authenticated asset endpoint, resolves pending sends, toggles reactions, and loads older history with opaque cursors. Beeper also exposes an experimental WebSocket API, but normal browser WebSockets cannot attach its required `Authorization` header, so the hosted client uses the documented HTTP endpoints.
 
 ## Deliberate limitations
 

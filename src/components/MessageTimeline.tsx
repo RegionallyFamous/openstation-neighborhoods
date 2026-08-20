@@ -2,6 +2,7 @@ import {
   AtSign,
   FileText,
   Hash,
+  LoaderCircle,
   Menu,
   MessageCircle,
   Send,
@@ -18,8 +19,11 @@ interface MessageTimelineProps {
   messages: CommunityMessage[];
   mode: 'disconnected' | 'beeper';
   isBusy: boolean;
+  canLoadOlder: boolean;
+  isLoadingOlder: boolean;
   onSend: (body: string) => Promise<void>;
   onReact: (messageId: string, key: string) => Promise<void>;
+  onLoadOlder: () => Promise<void>;
   onOpenChannels: () => void;
   onToggleMembers: () => void;
   onOpenConnect: () => void;
@@ -31,8 +35,11 @@ export function MessageTimeline({
   messages,
   mode,
   isBusy,
+  canLoadOlder,
+  isLoadingOlder,
   onSend,
   onReact,
+  onLoadOlder,
   onOpenChannels,
   onToggleMembers,
   onOpenConnect,
@@ -41,17 +48,22 @@ export function MessageTimeline({
   const [actionError, setActionError] = useState('');
   const [reactionPendingMessageId, setReactionPendingMessageId] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const nearBottomRef = useRef(true);
   const previousChannel = useRef(channel.id);
   const draft = drafts[channel.id] ?? '';
-  const readOnly = channel.kind === 'announcement';
+  const readOnly = channel.kind === 'announcement' || channel.isReadOnly === true;
   const canCompose = mode === 'beeper' && channel.joined && !readOnly;
 
   useEffect(() => {
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const behavior = previousChannel.current === channel.id && !reduceMotion ? 'smooth' : 'auto';
-    endRef.current?.scrollIntoView({ behavior, block: 'end' });
+    const changedChannel = previousChannel.current !== channel.id;
+    if (changedChannel || nearBottomRef.current) {
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const behavior = !changedChannel && !reduceMotion ? 'smooth' : 'auto';
+      endRef.current?.scrollIntoView({ behavior, block: 'end' });
+    }
     previousChannel.current = channel.id;
-  }, [channel.id, messages.length]);
+  }, [channel.id, messages.at(-1)?.id]);
 
   const grouped = useMemo(() => groupMessages(messages), [messages]);
 
@@ -77,7 +89,7 @@ export function MessageTimeline({
     try {
       await onReact(messageId, key);
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : 'The reaction could not be added.');
+      setActionError(error instanceof Error ? error.message : 'The reaction could not be updated.');
     } finally {
       setReactionPendingMessageId(null);
     }
@@ -99,7 +111,15 @@ export function MessageTimeline({
         </div>
       </header>
 
-      <div className="message-scroll">
+      <div
+        className="message-scroll"
+        ref={scrollRef}
+        onScroll={(event) => {
+          const element = event.currentTarget;
+          nearBottomRef.current =
+            element.scrollHeight - element.scrollTop - element.clientHeight < 120;
+        }}
+      >
         <section className="channel-welcome">
           <div className="channel-welcome__art">
             <span className="channel-welcome__sun" />
@@ -115,6 +135,34 @@ export function MessageTimeline({
             <span>{mode === 'beeper' ? 'Your Beeper account' : 'Connect your Beeper account'}</span>
           </div>
         </section>
+
+        {mode === 'beeper' && channel.joined && canLoadOlder && (
+          <button
+            className="load-older-messages"
+            type="button"
+            disabled={isLoadingOlder}
+            aria-busy={isLoadingOlder}
+            onClick={() => {
+              const scrollElement = scrollRef.current;
+              const previousHeight = scrollElement?.scrollHeight ?? 0;
+              void onLoadOlder()
+                .then(() => {
+                  window.requestAnimationFrame(() => {
+                    if (!scrollElement) return;
+                    scrollElement.scrollTop += scrollElement.scrollHeight - previousHeight;
+                  });
+                })
+                .catch((error) => {
+                  setActionError(
+                    error instanceof Error ? error.message : 'Older messages could not be loaded.',
+                  );
+                });
+            }}
+          >
+            {isLoadingOlder && <LoaderCircle className="spin" size={15} aria-hidden="true" />}
+            {isLoadingOlder ? 'LOADING EARLIER MESSAGES' : 'LOAD EARLIER MESSAGES'}
+          </button>
+        )}
 
         {mode === 'disconnected' ? (
           <section className="join-room-card">
@@ -212,9 +260,17 @@ function MessageGroup({
           <time dateTime={first.sentAt}>{formatTime(first.sentAt)}</time>
         </header>
         {messages.map((message) => (
-          <div className={`message${message.pending ? ' is-pending' : ''}`} key={message.id}>
+          <div
+            className={`message${message.pending ? ' is-pending' : ''}${message.delivery === 'failed' ? ' is-failed' : ''}`}
+            key={message.id}
+          >
             <p>{renderText(message.body)}</p>
             {message.edited && <small className="message__edited">edited</small>}
+            {message.delivery && message.delivery !== 'sent' && (
+              <small className={`message__delivery message__delivery--${message.delivery}`}>
+                {message.deliveryMessage || message.delivery}
+              </small>
+            )}
             {message.attachments.map((attachment) => attachment.url ? (
               <a className="message-attachment" href={attachment.url} key={attachment.id} target="_blank" rel="noreferrer">
                 <FileText size={19} />
@@ -232,14 +288,15 @@ function MessageGroup({
                   className={reaction.mine ? 'is-mine' : ''}
                   type="button"
                   key={`${reaction.key}-${reactionIndex}`}
-                  disabled={reactionPendingMessageId === message.id}
-                  aria-label={`React with ${reaction.key}`}
+                  disabled={reactionPendingMessageId === message.id || message.pending || message.delivery === 'failed'}
+                  aria-pressed={Boolean(reaction.mine)}
+                  aria-label={`${reaction.mine ? 'Remove' : 'Add'} ${reaction.key} reaction`}
                   onClick={() => void onReact(message.id, reaction.key)}
                 >
                   <span>{reaction.key}</span>{reaction.count}
                 </button>
               ))}
-              <button type="button" disabled={reactionPendingMessageId === message.id} onClick={() => void onReact(message.id, '✨')} aria-label="React with sparkle">
+              <button type="button" disabled={reactionPendingMessageId === message.id || message.pending || message.delivery === 'failed'} onClick={() => void onReact(message.id, '✨')} aria-label="Add sparkle reaction">
                 <Smile size={14} />+
               </button>
             </div>

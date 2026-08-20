@@ -154,6 +154,7 @@ export function mapBeeperChatsToChannels(
       unreadCount: match.unreadCount,
       mentionCount: match.unreadMentionsCount,
       joined: true,
+      isReadOnly: match.isReadOnly,
     };
   });
 }

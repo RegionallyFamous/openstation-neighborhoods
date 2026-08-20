@@ -6,15 +6,24 @@ import {
   completeBeeperOAuthCallback,
   disconnectBeeper,
   getStoredAccessToken,
+  getStoredAccessTokenSource,
   invalidateBeeperAuthorization,
+  introspectBeeperAccessToken,
+  revokeBeeperAccessToken,
   storeManualAccessToken,
 } from './beeper/oauth';
-import type { BeeperAccount, BeeperMessage, BeeperUser } from './beeper/types';
+import type {
+  BeeperAccount,
+  BeeperCursorPage,
+  BeeperMessage,
+  BeeperUser,
+} from './beeper/types';
 import type {
   CommunityChannel,
   CommunityMessage,
   ConnectionState,
   Member,
+  MessageAttachment,
 } from './types';
 
 type Mode = 'disconnected' | 'beeper';
@@ -23,6 +32,13 @@ interface HydrateMessagesOptions {
   generation?: number;
   markRead?: boolean;
   signal?: AbortSignal;
+}
+
+interface MessagePageState {
+  hasMore: boolean;
+  oldestCursor: string | null;
+  newestCursor: string | null;
+  historyExhausted: boolean;
 }
 
 const ACTIVE_POLL_INTERVAL_MS = 5_000;
@@ -38,9 +54,12 @@ export interface NeighborhoodsController {
   members: Member[];
   connection: ConnectionState;
   isBusy: boolean;
+  canLoadOlder: boolean;
+  isLoadingOlder: boolean;
   selectChannel: (channelId: string) => void;
   sendMessage: (body: string) => Promise<void>;
   addReaction: (messageId: string, key: string) => Promise<void>;
+  loadOlderMessages: () => Promise<void>;
   probeBeeper: () => Promise<void>;
   connectWithOAuth: () => Promise<void>;
   connectWithToken: (token: string) => Promise<void>;
@@ -53,6 +72,8 @@ export function useNeighborhoods(): NeighborhoodsController {
   const [channels, setChannels] = useState(flattenChannels);
   const [selectedChannelId, setSelectedChannelId] = useState('general');
   const [messageStore, setMessageStore] = useState<Record<string, CommunityMessage[]>>({});
+  const [messagePages, setMessagePages] = useState<Record<string, MessagePageState>>({});
+  const [loadingOlderChannelId, setLoadingOlderChannelId] = useState<string | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [connection, setConnection] = useState<ConnectionState>({
     kind: 'disconnected',
@@ -62,16 +83,31 @@ export function useNeighborhoods(): NeighborhoodsController {
   const selectedChannelIdRef = useRef('general');
   const clientRef = useRef<BeeperClient | null>(null);
   const selfMemberRef = useRef<Member | null>(null);
+  const memberStoreRef = useRef<Record<string, Member[]>>({});
+  const oauthEndpointsRef = useRef<{
+    introspection?: string;
+    revocation?: string;
+  }>({});
   const pollRef = useRef<number | null>(null);
   const pollAbortRef = useRef<AbortController | null>(null);
   const syncGenerationRef = useRef(0);
-  const messageRequestsRef = useRef(new Map<string, Promise<BeeperMessage[]>>());
+  const messageRequestsRef = useRef(
+    new Map<string, Promise<BeeperCursorPage<BeeperMessage>>>(),
+  );
   const readReceiptRequestsRef = useRef(new Set<string>());
   const lastReadMessageRef = useRef<Record<string, string>>({});
 
   const selectedChannel =
     channels.find((channel) => channel.id === selectedChannelId) ?? channels[0];
   const messages = messageStore[selectedChannel?.id] ?? [];
+  const selectedMessagePage = messagePages[selectedChannel?.id];
+  const canLoadOlder = Boolean(
+    mode === 'beeper' &&
+      selectedChannel?.joined &&
+      selectedMessagePage?.hasMore &&
+      selectedMessagePage.oldestCursor,
+  );
+  const isLoadingOlder = loadingOlderChannelId === selectedChannel?.id;
 
   const stopPolling = useCallback(() => {
     const hadActivePoll = pollAbortRef.current !== null || pollRef.current !== null;
@@ -86,13 +122,18 @@ export function useNeighborhoods(): NeighborhoodsController {
 
   const clearConnectedState = useCallback(() => {
     stopPolling();
+    clientRef.current?.dispose();
     clientRef.current = null;
     selfMemberRef.current = null;
+    memberStoreRef.current = {};
+    oauthEndpointsRef.current = {};
     setMode('disconnected');
     setChannels(flattenChannels());
     selectedChannelIdRef.current = 'general';
     setSelectedChannelId('general');
     setMessageStore({});
+    setMessagePages({});
+    setLoadingOlderChannelId(null);
     setMembers([]);
   }, [stopPolling]);
 
@@ -111,6 +152,52 @@ export function useNeighborhoods(): NeighborhoodsController {
     [clearConnectedState],
   );
 
+  const hydrateRoomDetails = useCallback(
+    async (
+      channel: CommunityChannel,
+      client = clientRef.current,
+      generation = syncGenerationRef.current,
+    ) => {
+      if (!client || !channel.beeperChatId) return;
+      try {
+        const detail = await client.getChat(channel.beeperChatId, -1);
+        if (generation !== syncGenerationRef.current || clientRef.current !== client) return;
+
+        const roomMembers = await membersFromBeeperUsers(client, detail.participants);
+        if (generation !== syncGenerationRef.current || clientRef.current !== client) return;
+        const self = selfMemberRef.current;
+        const completeMembers = self && !roomMembers.some((member) => member.id === self.id)
+          ? [self, ...roomMembers]
+          : roomMembers;
+        memberStoreRef.current[channel.id] = completeMembers;
+
+        if (selectedChannelIdRef.current === channel.id) setMembers(completeMembers);
+        setChannels((current) =>
+          current.map((item) =>
+            item.id === channel.id
+              ? {
+                  ...item,
+                  isReadOnly: detail.isReadOnly,
+                  unreadCount: detail.unreadCount,
+                  mentionCount: detail.unreadMentionsCount,
+                }
+              : item,
+          ),
+        );
+        setMessageStore((current) => ({
+          ...current,
+          [channel.id]: (current[channel.id] ?? []).map((message) =>
+            enrichMessageAuthor(message, completeMembers),
+          ),
+        }));
+      } catch (error) {
+        recoverAuthorization(error);
+        throw error;
+      }
+    },
+    [recoverAuthorization],
+  );
+
   const hydrateMessages = useCallback(
     async (
       channel: CommunityChannel,
@@ -125,7 +212,7 @@ export function useNeighborhoods(): NeighborhoodsController {
         const requestKey = `${generation}:${channel.beeperChatId}`;
         let request = messageRequestsRef.current.get(requestKey);
         if (!request) {
-          request = client.getMessages(channel.beeperChatId);
+          request = client.getMessagesPage(channel.beeperChatId);
           messageRequestsRef.current.set(requestKey, request);
           void request
             .finally(() => {
@@ -136,12 +223,31 @@ export function useNeighborhoods(): NeighborhoodsController {
             .catch(() => undefined);
         }
 
-        const raw = await request;
+        const page = await request;
+        if (options.signal?.aborted || generation !== syncGenerationRef.current) return;
+        const knownMembers = memberStoreRef.current[channel.id] ?? [];
+        const hydrated = await Promise.all(
+          page.items.map((message) =>
+            toCommunityMessage(message, channel.id, client, knownMembers),
+          ),
+        );
         if (options.signal?.aborted || generation !== syncGenerationRef.current) return;
         setMessageStore((current) => ({
           ...current,
-          [channel.id]: raw.map((message) => toCommunityMessage(message, channel.id)),
+          [channel.id]: mergeCommunityMessages(current[channel.id] ?? [], hydrated),
         }));
+        setMessagePages((current) => {
+          const existing = current[channel.id];
+          return {
+            ...current,
+            [channel.id]: {
+              hasMore: existing?.historyExhausted ? false : page.hasMore,
+              oldestCursor: existing?.oldestCursor ?? page.oldestCursor,
+              newestCursor: page.newestCursor,
+              historyExhausted: existing?.historyExhausted ?? !page.hasMore,
+            },
+          };
+        });
 
         if (
           !options.markRead ||
@@ -151,7 +257,7 @@ export function useNeighborhoods(): NeighborhoodsController {
         ) {
           return;
         }
-        const newest = raw.at(-1);
+        const newest = page.items.at(-1);
         if (!newest || lastReadMessageRef.current[channel.id] === newest.id) return;
 
         const receiptKey = `${generation}:${channel.id}:${newest.id}`;
@@ -193,11 +299,22 @@ export function useNeighborhoods(): NeighborhoodsController {
       stopPolling();
       setIsBusy(true);
       setConnection({ kind: 'authorizing', message: 'Opening the local Beeper door…' });
+      const client = new BeeperClient({ token });
       try {
-        const client = new BeeperClient({ token });
         const info = await client.getInfo();
         if (info.app.bundle_id !== 'com.automattic.beeper.desktop' || info.server.remote_access) {
           throw new Error('This local service is not a supported Beeper Desktop connection.');
+        }
+        oauthEndpointsRef.current = {
+          introspection: info.endpoints.oauth?.introspection_endpoint,
+          revocation: info.endpoints.oauth?.revocation_endpoint,
+        };
+        const tokenActive = await introspectBeeperAccessToken(
+          token,
+          info.endpoints.oauth?.introspection_endpoint,
+        );
+        if (!tokenActive) {
+          throw new BeeperApiError('Beeper authorization is invalid or expired.', 401, 'unauthorized');
         }
         const [accounts, initialChats] = await Promise.all([
           client.getAccounts(),
@@ -210,10 +327,17 @@ export function useNeighborhoods(): NeighborhoodsController {
         const profile: { avatarURL?: string; displayName?: string } = matrixAccount.user?.id
           ? await client.getUserProfile(matrixAccount.user.id).catch(() => ({}))
           : {};
-        const matrixAvatarURL = await resolveAvatarURL(
-          client,
-          profile.avatarURL || matrixAccount.user?.imgURL,
-        );
+        const matrixIdentity: BeeperAccount = {
+          ...matrixAccount,
+          user: {
+            ...matrixAccount.user,
+            fullName: matrixAccount.user?.fullName || profile.displayName,
+            imgURL: profile.avatarURL || matrixAccount.user?.imgURL,
+          },
+        };
+        const matrixAvatarURL = await client
+          .resolveAssetURL(matrixIdentity.user?.imgURL)
+          .catch(() => undefined);
         const initiallyMapped = mapBeeperChatsToChannels(
           flattenChannels(),
           initialChats,
@@ -274,25 +398,14 @@ export function useNeighborhoods(): NeighborhoodsController {
           mapped[0];
 
         clientRef.current = client;
-        const self = memberFromMatrixAccount(matrixAccount, matrixAvatarURL);
+        const self = memberFromMatrixAccount(matrixIdentity, matrixAvatarURL);
         selfMemberRef.current = self;
         setMode('beeper');
         setChannels(mapped);
         selectedChannelIdRef.current = first.id;
         setSelectedChannelId(first.id);
         setMessageStore({});
-        const joinedChatIDs = new Set(
-          joined.flatMap((channel) => channel.beeperChatId ? [channel.beeperChatId] : []),
-        );
-        const discoveredMembers = membersFromChats(
-          chats
-            .filter((chat) => joinedChatIDs.has(chat.id))
-            .flatMap((chat) => chat.participants),
-        );
-        setMembers([
-          self,
-          ...discoveredMembers.filter((member) => member.id !== self.id),
-        ]);
+        setMembers([self]);
         setConnection({
           kind: 'connected',
           message:
@@ -302,16 +415,21 @@ export function useNeighborhoods(): NeighborhoodsController {
                 ? `${joined.length} of ${mapped.length} OpenStation rooms connected automatically`
                 : 'Beeper is connected; the OpenStation rooms are not reachable yet',
           accountName:
-            (matrixAccount.user?.username && shortMatrixIdentity(matrixAccount.user.username)) ||
-            (matrixAccount.user?.id && shortMatrixIdentity(matrixAccount.user.id)) ||
-            matrixAccount.user?.fullName ||
+            matrixIdentity.user?.fullName ||
+            (matrixIdentity.user?.username && shortMatrixIdentity(matrixIdentity.user.username)) ||
+            (matrixIdentity.user?.id && shortMatrixIdentity(matrixIdentity.user.id)) ||
             'Beeper',
           avatarUrl: matrixAvatarURL,
         });
-        if (first.beeperChatId) await hydrateMessages(first, client);
+        if (first.beeperChatId) {
+          await hydrateRoomDetails(first, client);
+          await hydrateMessages(first, client);
+        }
         return true;
       } catch (error) {
+        client.dispose();
         if (recoverAuthorization(error)) return false;
+        clearConnectedState();
         setConnection({
           kind: 'error',
           message: error instanceof Error ? error.message : 'Could not connect to Beeper.',
@@ -321,7 +439,7 @@ export function useNeighborhoods(): NeighborhoodsController {
         setIsBusy(false);
       }
     },
-    [hydrateMessages, recoverAuthorization, stopPolling],
+    [clearConnectedState, hydrateMessages, hydrateRoomDetails, recoverAuthorization, stopPolling],
   );
 
   useEffect(() => {
@@ -349,6 +467,9 @@ export function useNeighborhoods(): NeighborhoodsController {
     const controller = new AbortController();
     const generation = syncGenerationRef.current;
     const channel = selectedChannel;
+    const cachedMembers = memberStoreRef.current[channel.id];
+    setMembers(cachedMembers ?? (selfMemberRef.current ? [selfMemberRef.current] : []));
+    void hydrateRoomDetails(channel, clientRef.current, generation).catch(() => undefined);
     let failureCount = 0;
     let running = false;
     let rerunRequested = false;
@@ -421,16 +542,132 @@ export function useNeighborhoods(): NeighborhoodsController {
     };
   }, [
     hydrateMessages,
+    hydrateRoomDetails,
     mode,
     selectedChannel?.beeperChatId,
     selectedChannel?.id,
     stopPolling,
   ]);
 
+  const loadOlderMessages = useCallback(async () => {
+    const client = clientRef.current;
+    const channel = selectedChannel;
+    const pageState = messagePages[channel.id];
+    if (
+      !client ||
+      !channel.beeperChatId ||
+      !pageState?.hasMore ||
+      !pageState.oldestCursor ||
+      loadingOlderChannelId
+    ) {
+      return;
+    }
+
+    const generation = syncGenerationRef.current;
+    setLoadingOlderChannelId(channel.id);
+    try {
+      const page = await client.getMessagesPage(channel.beeperChatId, {
+        cursor: pageState.oldestCursor,
+        direction: 'before',
+      });
+      if (generation !== syncGenerationRef.current || clientRef.current !== client) return;
+      const knownMembers = memberStoreRef.current[channel.id] ?? [];
+      const older = await Promise.all(
+        page.items.map((message) =>
+          toCommunityMessage(message, channel.id, client, knownMembers),
+        ),
+      );
+      if (generation !== syncGenerationRef.current || clientRef.current !== client) return;
+      setMessageStore((current) => ({
+        ...current,
+        [channel.id]: mergeCommunityMessages(current[channel.id] ?? [], older),
+      }));
+      setMessagePages((current) => ({
+        ...current,
+        [channel.id]: {
+          hasMore: page.hasMore,
+          oldestCursor: page.oldestCursor,
+          newestCursor: current[channel.id]?.newestCursor ?? page.newestCursor,
+          historyExhausted: !page.hasMore,
+        },
+      }));
+    } catch (error) {
+      recoverAuthorization(error);
+      throw error;
+    } finally {
+      setLoadingOlderChannelId((current) => current === channel.id ? null : current);
+    }
+  }, [
+    loadingOlderChannelId,
+    messagePages,
+    recoverAuthorization,
+    selectedChannel,
+  ]);
+
   const selectChannel = useCallback((channelId: string) => {
     selectedChannelIdRef.current = channelId;
     setSelectedChannelId(channelId);
   }, []);
+
+  const reconcilePendingMessage = useCallback(
+    async (
+      channel: CommunityChannel,
+      client: BeeperClient,
+      pendingID: string,
+      generation: number,
+    ) => {
+      const retryDelays = [300, 700, 1_500, 3_000, 5_000];
+      for (const delayMs of retryDelays) {
+        await delay(delayMs);
+        if (generation !== syncGenerationRef.current || clientRef.current !== client) return;
+        try {
+          const message = await client.getMessage(channel.beeperChatId as string, pendingID);
+          const knownMembers = memberStoreRef.current[channel.id] ?? [];
+          const hydrated = await toCommunityMessage(
+            message,
+            channel.id,
+            client,
+            knownMembers,
+          );
+          if (generation !== syncGenerationRef.current || clientRef.current !== client) return;
+          setMessageStore((current) => ({
+            ...current,
+            [channel.id]: replacePendingMessage(
+              current[channel.id] ?? [],
+              pendingID,
+              hydrated,
+            ),
+          }));
+          if (message.sendStatus?.status !== 'PENDING') return;
+        } catch (error) {
+          if (recoverAuthorization(error)) return;
+          if (!(error instanceof BeeperApiError) || ![404, 502].includes(error.status)) {
+            setMessageStore((current) => ({
+              ...current,
+              [channel.id]: updatePendingDelivery(
+                current[channel.id] ?? [],
+                pendingID,
+                'failed',
+                error instanceof Error ? error.message : 'Beeper could not confirm this message.',
+              ),
+            }));
+            return;
+          }
+        }
+      }
+
+      setMessageStore((current) => ({
+        ...current,
+        [channel.id]: updatePendingDelivery(
+          current[channel.id] ?? [],
+          pendingID,
+          'unconfirmed',
+          'Sent to Beeper; confirmation is still pending.',
+        ),
+      }));
+    },
+    [recoverAuthorization],
+  );
 
   const sendMessage = useCallback(
     async (body: string) => {
@@ -473,20 +710,14 @@ export function useNeighborhoods(): NeighborhoodsController {
               body: cleanBody,
               sentAt: new Date().toISOString(),
               pending: true,
+              delivery: 'pending',
+              deliveryMessage: 'Waiting for Beeper to confirm delivery.',
               reactions: [],
               attachments: [],
             },
           ],
         }));
-        window.setTimeout(() => {
-          if (
-            generation !== syncGenerationRef.current ||
-            clientRef.current !== client
-          ) {
-            return;
-          }
-          void hydrateMessages(channel, client, { generation }).catch(() => undefined);
-        }, 1_000);
+        void reconcilePendingMessage(channel, client, pendingID, generation);
       } catch (error) {
         recoverAuthorization(error);
         throw error;
@@ -494,7 +725,7 @@ export function useNeighborhoods(): NeighborhoodsController {
         setIsBusy(false);
       }
     },
-    [hydrateMessages, mode, recoverAuthorization, selectedChannel],
+    [mode, reconcilePendingMessage, recoverAuthorization, selectedChannel],
   );
 
   const addReaction = useCallback(
@@ -505,10 +736,29 @@ export function useNeighborhoods(): NeighborhoodsController {
         const chatID = selectedChannel.beeperChatId;
         const generation = syncGenerationRef.current;
         try {
-          await client.addReaction(
-            chatID,
-            messageId,
-            key,
+          const existingMessage = (messageStore[channel.id] ?? []).find(
+            (message) => message.id === messageId,
+          );
+          const existingReaction = existingMessage?.reactions.find(
+            (reaction) => reaction.key === key,
+          );
+          if (existingReaction?.mine) {
+            await client.deleteReaction(chatID, messageId, key);
+          } else {
+            await client.addReaction(chatID, messageId, key);
+          }
+          if (
+            generation !== syncGenerationRef.current ||
+            clientRef.current !== client
+          ) {
+            return;
+          }
+          const refreshed = await client.getMessage(chatID, messageId);
+          const hydrated = await toCommunityMessage(
+            refreshed,
+            channel.id,
+            client,
+            memberStoreRef.current[channel.id] ?? [],
           );
           if (
             generation !== syncGenerationRef.current ||
@@ -516,7 +766,13 @@ export function useNeighborhoods(): NeighborhoodsController {
           ) {
             return;
           }
-          await hydrateMessages(channel, client, { generation });
+          setMessageStore((current) => ({
+            ...current,
+            [channel.id]: mergeCommunityMessages(
+              current[channel.id] ?? [],
+              [hydrated],
+            ),
+          }));
           return;
         } catch (error) {
           recoverAuthorization(error);
@@ -524,7 +780,7 @@ export function useNeighborhoods(): NeighborhoodsController {
         }
       }
     },
-    [hydrateMessages, mode, recoverAuthorization, selectedChannel],
+    [messageStore, mode, recoverAuthorization, selectedChannel],
   );
 
   const probeBeeper = useCallback(async () => {
@@ -582,8 +838,19 @@ export function useNeighborhoods(): NeighborhoodsController {
   }, [clearConnectedState]);
 
   const disconnect = useCallback(() => {
+    const token = getStoredAccessToken();
+    const source = getStoredAccessTokenSource();
+    const revocationEndpoint = oauthEndpointsRef.current.revocation;
     disconnectBeeper();
     resetConnection();
+    if (token && source === 'oauth') {
+      void revokeBeeperAccessToken(token, revocationEndpoint).catch(() => {
+        setConnection({
+          kind: 'disconnected',
+          message: 'Disconnected locally. Beeper could not confirm revocation because it was unavailable.',
+        });
+      });
+    }
   }, [resetConnection]);
 
   return useMemo(
@@ -596,9 +863,12 @@ export function useNeighborhoods(): NeighborhoodsController {
       members,
       connection,
       isBusy,
+      canLoadOlder,
+      isLoadingOlder,
       selectChannel,
       sendMessage,
       addReaction,
+      loadOlderMessages,
       probeBeeper,
       connectWithOAuth,
       connectWithToken,
@@ -607,12 +877,15 @@ export function useNeighborhoods(): NeighborhoodsController {
     }),
     [
       addReaction,
+      canLoadOlder,
       channels,
       connectWithOAuth,
       connectWithToken,
       connection,
       disconnect,
       isBusy,
+      isLoadingOlder,
+      loadOlderMessages,
       members,
       messages,
       mode,
@@ -634,9 +907,10 @@ function findMatrixAccount(accounts: BeeperAccount[]): BeeperAccount | undefined
 
 function memberFromMatrixAccount(account: BeeperAccount, avatarUrl?: string): Member {
   const id = account.user?.id || account.user?.username || account.accountID;
-  const name = account.user?.username
-    ? shortMatrixIdentity(account.user.username)
-    : account.user?.fullName || compactHandle(id);
+  const name =
+    account.user?.fullName ||
+    (account.user?.username && shortMatrixIdentity(account.user.username)) ||
+    compactHandle(id);
   return {
     id,
     name,
@@ -649,41 +923,71 @@ function memberFromMatrixAccount(account: BeeperAccount, avatarUrl?: string): Me
   };
 }
 
-function membersFromChats(users: BeeperUser[]): Member[] {
+async function membersFromBeeperUsers(
+  client: BeeperClient,
+  users: BeeperUser[],
+): Promise<Member[]> {
   const unique = new Map<string, Member>();
-  users.forEach((user) => {
-    if (!user.id || unique.has(user.id)) return;
-    const name = user.username
-      ? shortMatrixIdentity(user.username)
-      : user.fullName || compactHandle(user.id);
-    unique.set(user.id, {
+  const distinctUsers = users.filter((user, index) =>
+    Boolean(user.id) && users.findIndex((candidate) => candidate.id === user.id) === index,
+  );
+  const resolved = await mapWithConcurrency(distinctUsers, 6, async (user) => {
+    const name =
+      user.fullName ||
+      (user.username && shortMatrixIdentity(user.username)) ||
+      compactHandle(user.id);
+    const avatarUrl = await client.resolveAssetURL(user.imgURL).catch(() => undefined);
+    return {
       id: user.id,
       name,
-      handle: user.id,
+      handle: shortMatrixIdentity(user.id),
       avatar: initials(name),
-      avatarUrl: user.imgURL,
+      avatarUrl,
       color: colorForID(user.id),
       presence: 'unknown',
       role: user.isAdmin ? 'moderator' : 'member',
-    });
+    } satisfies Member;
   });
+  resolved.forEach((member) => unique.set(member.id, member));
   return [...unique.values()];
 }
 
-function toCommunityMessage(message: BeeperMessage, channelId: string): CommunityMessage {
+async function toCommunityMessage(
+  message: BeeperMessage,
+  channelId: string,
+  client: BeeperClient,
+  knownMembers: Member[],
+): Promise<CommunityMessage> {
+  const knownAuthor = knownMembers.find((member) => member.id === message.senderID);
   const name =
+    knownAuthor?.name ||
     message.sender?.fullName ||
     message.sender?.username ||
     compactHandle(message.senderID);
+  const avatarUrl = knownAuthor?.avatarUrl || await client
+    .resolveAssetURL(message.sender?.imgURL)
+    .catch(() => undefined);
+  const attachments = await Promise.all(
+    message.attachments.map(async (attachment, index) => ({
+      id: attachment.id || `${message.id}-attachment-${index}`,
+      type: attachmentType(attachment.type),
+      name: attachment.fileName || 'Attachment',
+      size: attachment.fileSize,
+      url: await client.resolveAssetURL(attachment.srcURL).catch(() => undefined),
+    })),
+  );
+  const failed = message.sendStatus?.status === 'FAIL_RETRIABLE' ||
+    message.sendStatus?.status === 'FAIL_PERMANENT';
+  const pending = message.sendStatus?.status === 'PENDING';
   return {
     id: message.id,
     channelId,
-    author: {
+    author: knownAuthor ?? {
       id: message.senderID,
       name,
-      handle: message.senderID,
+      handle: shortMatrixIdentity(message.senderID),
       avatar: initials(name),
-      avatarUrl: message.sender?.imgURL,
+      avatarUrl,
       color: colorForID(message.senderID),
       presence: 'unknown',
       role: message.sender?.isAdmin ? 'moderator' : 'member',
@@ -691,15 +995,101 @@ function toCommunityMessage(message: BeeperMessage, channelId: string): Communit
     body: message.text,
     sentAt: message.timestamp,
     edited: message.isEdited,
+    pending,
+    delivery: failed ? 'failed' : pending ? 'pending' : 'sent',
+    deliveryMessage: failed
+      ? message.sendStatus?.message || 'Beeper could not deliver this message.'
+      : pending
+        ? 'Waiting for Beeper to confirm delivery.'
+        : undefined,
     reactions: message.reactions,
-    attachments: message.attachments.map((attachment, index) => ({
-      id: attachment.id || `${message.id}-attachment-${index}`,
-      type: attachment.type === 'img' ? 'image' : 'file',
-      name: attachment.fileName || 'Attachment',
-      size: attachment.fileSize,
-      url: attachment.srcURL,
-    })),
+    attachments,
   };
+}
+
+function mergeCommunityMessages(
+  current: CommunityMessage[],
+  incoming: CommunityMessage[],
+): CommunityMessage[] {
+  const merged = new Map(current.map((message) => [message.id, message]));
+  incoming.forEach((message) => {
+    if (message.delivery !== 'pending') {
+      const optimistic = [...merged.values()].find((candidate) =>
+        candidate.id !== message.id &&
+        ['pending', 'unconfirmed'].includes(candidate.delivery ?? '') &&
+        candidate.author.id === message.author.id &&
+        candidate.body === message.body &&
+        Math.abs(Date.parse(candidate.sentAt) - Date.parse(message.sentAt)) < 120_000,
+      );
+      if (optimistic) merged.delete(optimistic.id);
+    }
+    merged.set(message.id, message);
+  });
+  return [...merged.values()].sort(
+    (a, b) => Date.parse(a.sentAt) - Date.parse(b.sentAt),
+  );
+}
+
+function replacePendingMessage(
+  messages: CommunityMessage[],
+  pendingID: string,
+  resolved: CommunityMessage,
+): CommunityMessage[] {
+  const withoutPending = messages.filter(
+    (message) => message.id !== pendingID && message.id !== resolved.id,
+  );
+  return mergeCommunityMessages(withoutPending, [resolved]);
+}
+
+function updatePendingDelivery(
+  messages: CommunityMessage[],
+  pendingID: string,
+  delivery: CommunityMessage['delivery'],
+  deliveryMessage: string,
+): CommunityMessage[] {
+  return messages.map((message) =>
+    message.id === pendingID
+      ? {
+          ...message,
+          pending: delivery === 'pending',
+          delivery,
+          deliveryMessage,
+        }
+      : message,
+  );
+}
+
+function enrichMessageAuthor(
+  message: CommunityMessage,
+  members: Member[],
+): CommunityMessage {
+  const member = members.find((candidate) => candidate.id === message.author.id);
+  return member ? { ...message, author: member } : message;
+}
+
+function attachmentType(value?: string): MessageAttachment['type'] {
+  if (value === 'img') return 'image';
+  if (value === 'audio') return 'audio';
+  if (value === 'video') return 'video';
+  return 'file';
+}
+
+async function mapWithConcurrency<T, R>(
+  values: T[],
+  concurrency: number,
+  mapper: (value: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(values.length);
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+    while (nextIndex < values.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await mapper(values[index]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
 }
 
 function compactHandle(value: string): string {
@@ -710,14 +1100,8 @@ function shortMatrixIdentity(value: string): string {
   return value.replace(/:[^:]+$/, '');
 }
 
-async function resolveAvatarURL(client: BeeperClient, value?: string): Promise<string | undefined> {
-  if (!value) return undefined;
-  if (/^https:\/\//i.test(value)) return value;
-  try {
-    return await client.getAssetBlobURL(value);
-  } catch {
-    return undefined;
-  }
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
 function initials(value: string): string {

@@ -89,12 +89,10 @@ describe('Neighborhoods connection controller', () => {
     expect(sessionStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull();
     expect(sessionStorage.getItem(OAUTH_STATE_KEY)).toBeNull();
     expect(localStorage.getItem(OAUTH_CLIENT_KEY)).toBeNull();
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    for (const [, init] of fetchMock.mock.calls.slice(1)) {
-      expect((init?.headers as Headers).get('Authorization')).toBe(
-        'Bearer stale-synthetic-token',
-      );
-    }
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [introspectionInput, introspectionInit] = fetchMock.mock.calls[1];
+    expect(String(introspectionInput)).toContain('/oauth/introspect');
+    expect(String(introspectionInit?.body)).toContain('token=stale-synthetic-token');
   });
 });
 

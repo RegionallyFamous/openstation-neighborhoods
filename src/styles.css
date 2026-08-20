@@ -823,6 +823,38 @@ a {
 
 .message + .message { margin-top: 5px; }
 .message.is-pending { opacity: 0.62; }
+.message.is-failed { opacity: 1; }
+.message__delivery {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #aaa4bd;
+}
+.message__delivery--failed { color: #ff9b9b; }
+.message__delivery--unconfirmed { color: #e8c38f; }
+
+.load-older-messages {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 38px;
+  margin: 2px auto 18px;
+  padding: 0 16px;
+  border: 1px solid rgba(151, 136, 255, 0.28);
+  border-radius: 999px;
+  color: #c6bfff;
+  background: rgba(95, 75, 185, 0.1);
+  font: 650 11px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+.load-older-messages:hover:not(:disabled) {
+  border-color: rgba(151, 136, 255, 0.55);
+  background: rgba(95, 75, 185, 0.2);
+}
+.load-older-messages:disabled { cursor: wait; opacity: 0.7; }
 
 .message p {
   margin: 0;
