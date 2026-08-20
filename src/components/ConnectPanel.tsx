@@ -197,7 +197,7 @@ export function ConnectPanel({
               </li>
               <li>
                 <span><ShieldCheck size={20} /></span>
-                <div><strong>Approve Neighborhoods</strong><small>Beeper shows the authorization screen. Approval lets OpenStation join its seven public rooms and acknowledge read state; your password and encryption keys never enter this app.</small></div>
+                <div><strong>Approve Neighborhoods</strong><small>Beeper shows the authorization screen. Approval lets OpenStation join its six supported public rooms and acknowledge read state; your password and encryption keys never enter this app.</small></div>
               </li>
             </ol>
 

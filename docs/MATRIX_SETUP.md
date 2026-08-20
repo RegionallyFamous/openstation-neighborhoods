@@ -10,7 +10,7 @@ Neighborhoods uses the Matrix account already inside Beeper. `openstation.chat` 
 4. Connect and approve OpenStation's local read/write access.
 5. Press **Create OpenStation Community** once.
 
-The provisioner creates seven public rooms first, followed by a public Matrix Space whose initial `m.space.child` state links every room. Welcome and Announcements restrict ordinary `m.room.message` events while still allowing reactions. The remaining rooms use normal public-chat permissions.
+The operator workflow creates six supported public rooms first, followed by a public Matrix Space whose initial `m.space.child` state links every room. Welcome and Announcements restrict ordinary `m.room.message` events while still allowing reactions. The remaining rooms use normal public-chat permissions.
 
 Progress is saved in browser local storage after every successful room creation, so an interrupted run resumes rather than recreating completed rooms. The Beeper access token remains in session storage and never enters SpaceFast or OpenStation infrastructure.
 

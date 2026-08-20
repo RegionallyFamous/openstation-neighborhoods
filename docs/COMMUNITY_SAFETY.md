@@ -29,7 +29,7 @@ community, in the privacy notice, and from the reporting interface:
 The disclosure must not describe these rooms as private merely because guests
 cannot join or unauthenticated visitors cannot read their history. The rooms
 are public-join rooms, and the web app automatically joins them after the user
-consents. The action must say that it will connect Beeper and join seven public
+consents. The action must say that it will connect Beeper and join six supported public
 rooms; a generic connection approval is not sufficiently specific.
 
 A member's Matrix ID, display name, avatar, room membership, messages, media,

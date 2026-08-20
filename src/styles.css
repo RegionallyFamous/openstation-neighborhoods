@@ -903,7 +903,7 @@ a {
 
 .composer {
   display: grid;
-  grid-template-columns: 35px minmax(0, 1fr) repeat(4, 31px);
+  grid-template-columns: minmax(0, 1fr) 36px;
   align-items: center;
   min-height: 54px;
   margin: 0 18px 16px;
@@ -940,7 +940,6 @@ a {
 .composer button { display: grid; place-items: center; width: 29px; height: 29px; padding: 0; border: 0; border-radius: 8px; color: #8c87a4; cursor: pointer; background: transparent; }
 .composer button:hover:not(:disabled) { color: white; background: rgba(255, 255, 255, 0.055); }
 .composer button:disabled { opacity: 0.38; cursor: not-allowed; }
-.composer > button:first-child { color: #241d35; background: #7d71c9; }
 .composer .composer__send {
   color: var(--void);
   background: linear-gradient(135deg, var(--nebula), var(--sirius));

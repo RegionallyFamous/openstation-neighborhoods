@@ -70,7 +70,7 @@ export function ProvisionPanel({
         </>
       ) : (
         <>
-          <p>This administrator tool can create one public Matrix Space and seven public rooms. Browser-local recovery cannot prevent duplicates from another browser.</p>
+          <p>This administrator tool can create one public Matrix Space and six supported public rooms. Browser-local recovery cannot prevent duplicates from another browser.</p>
           {connected ? (
             <>
               <p>Connected identity: <strong>{connection.accountName || 'Unnamed Beeper Matrix account'}</strong></p>

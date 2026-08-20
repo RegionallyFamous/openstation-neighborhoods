@@ -295,8 +295,8 @@ export function useNeighborhoods(): NeighborhoodsController {
                 ? `${joined.length} of ${mapped.length} OpenStation rooms connected automatically`
                 : 'Beeper is connected; the OpenStation rooms are not reachable yet',
           accountName:
-            matrixAccount.user?.fullName ||
             matrixAccount.user?.username ||
+            matrixAccount.user?.fullName ||
             matrixAccount.user?.id ||
             'Beeper',
         });
@@ -626,7 +626,7 @@ function findMatrixAccount(accounts: BeeperAccount[]): BeeperAccount | undefined
 
 function memberFromMatrixAccount(account: BeeperAccount): Member {
   const id = account.user?.id || account.user?.username || account.accountID;
-  const name = account.user?.fullName || account.user?.username || compactHandle(id);
+  const name = account.user?.username || account.user?.fullName || compactHandle(id);
   return {
     id,
     name,
