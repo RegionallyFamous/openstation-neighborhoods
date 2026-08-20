@@ -333,7 +333,7 @@ export function useNeighborhoods(): NeighborhoodsController {
     async (token: string, allowAutomaticJoin = false) => {
       stopPolling();
       setIsBusy(true);
-      setConnection({ kind: 'authorizing', message: 'Opening the door through Beeper…' });
+      setConnection({ kind: 'authorizing', message: 'Beeper is checking your saved pass…' });
       const client = new BeeperClient({ token });
       try {
         const info = await client.getInfo();
@@ -348,10 +348,10 @@ export function useNeighborhoods(): NeighborhoodsController {
         if (!tokenActive) {
           throw new BeeperApiError('Beeper authorization is invalid or expired.', 401, 'unauthorized');
         }
-        const [accounts, initialChats] = await Promise.all([
-          client.getAccounts(),
-          getOpenStationChats(client),
-        ]);
+        setConnection({ kind: 'authorizing', message: 'Pass is good. Gathering your rooms…' });
+        const accountsPromise = client.getAccounts();
+        const chatsPromise = getOpenStationChats(client);
+        const accounts = await accountsPromise;
         const matrixAccount = findMatrixAccount(accounts);
         if (!matrixAccount) {
           throw new Error('Beeper is open, but your Beeper identity did not show up.');
@@ -364,9 +364,11 @@ export function useNeighborhoods(): NeighborhoodsController {
             matrixAccount.statusText || 'Your Beeper account needs attention before OpenStation can connect.',
           );
         }
-        const profile: { avatarURL?: string; displayName?: string } = matrixAccount.user?.id
-          ? await client.getUserProfile(matrixAccount.user.id).catch(() => ({}))
-          : {};
+        const profilePromise: Promise<{ avatarURL?: string; displayName?: string }> = matrixAccount.user?.id
+          ? client.getUserProfile(matrixAccount.user.id).catch(() => ({}))
+          : Promise.resolve({});
+        const [initialChats, profile] = await Promise.all([chatsPromise, profilePromise]);
+        setConnection({ kind: 'authorizing', message: 'Rooms found. Fluffing the cushions…' });
         const matrixIdentity: BeeperAccount = {
           ...matrixAccount,
           user: {
@@ -375,9 +377,6 @@ export function useNeighborhoods(): NeighborhoodsController {
             imgURL: profile.avatarURL || matrixAccount.user?.imgURL,
           },
         };
-        const matrixAvatarURL = await client
-          .resolveAssetURL(matrixIdentity.user?.imgURL)
-          .catch(() => undefined);
         const initiallyMapped = mapBeeperChatsToChannels(
           flattenChannels(),
           initialChats,
@@ -439,7 +438,7 @@ export function useNeighborhoods(): NeighborhoodsController {
           mapped[0];
 
         clientRef.current = client;
-        const self = memberFromMatrixAccount(matrixIdentity, matrixAvatarURL);
+        const self = memberFromMatrixAccount(matrixIdentity);
         selfMemberRef.current = self;
         setMode('beeper');
         setChannels(mapped);
@@ -458,8 +457,30 @@ export function useNeighborhoods(): NeighborhoodsController {
           accountName:
             self.name,
           accountHandle: self.handle,
-          avatarUrl: matrixAvatarURL,
         });
+        if (matrixIdentity.user?.imgURL) {
+          void client.resolveAssetURL(matrixIdentity.user.imgURL)
+            .then((avatarUrl) => {
+              if (!avatarUrl || clientRef.current !== client) return;
+              const updatedSelf = memberFromMatrixAccount(matrixIdentity, avatarUrl);
+              selfMemberRef.current = updatedSelf;
+              memberStoreRef.current = Object.fromEntries(
+                Object.entries(memberStoreRef.current).map(([channelID, roomMembers]) => [
+                  channelID,
+                  roomMembers.map((member) =>
+                    member.id === updatedSelf.id ? { ...member, ...updatedSelf } : member,
+                  ),
+                ]),
+              );
+              setMembers((current) => current.map((member) =>
+                member.id === updatedSelf.id ? { ...member, ...updatedSelf } : member,
+              ));
+              setConnection((current) => current.kind === 'connected'
+                ? { ...current, avatarUrl }
+                : current);
+            })
+            .catch(() => undefined);
+        }
         return true;
       } catch (error) {
         client.dispose();

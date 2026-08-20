@@ -65,6 +65,15 @@ export default function App() {
     }
   }, [neighborhoods.connection.kind]);
 
+  useEffect(() => {
+    if (!restoringSession) return;
+    const timer = window.setTimeout(() => {
+      setRestoringSession(false);
+      setConnectOpen(true);
+    }, 10_000);
+    return () => window.clearTimeout(timer);
+  }, [restoringSession]);
+
   const closeMembers = useCallback((restoreFocus = true) => {
     setMembersOpen(false);
     if (restoreFocus) {
@@ -232,7 +241,7 @@ export default function App() {
           <LoaderCircle className="spin" size={17} aria-hidden="true" />
           <span>
             <strong>Welcome back.</strong>
-            <small>{restoreMessage(neighborhoods.connection.kind)}</small>
+            <small>{restoreMessage(neighborhoods.connection)}</small>
           </span>
         </div>
       )}
@@ -246,8 +255,9 @@ export function shouldRestoreBeeperSession(href: string, hasStoredSession: boole
   return url.searchParams.has('code') || url.searchParams.has('error');
 }
 
-function restoreMessage(kind: ConnectionState['kind']): string {
-  if (kind === 'authorizing') return 'Checking your Beeper key…';
-  if (kind === 'probing') return 'Looking for Beeper…';
+function restoreMessage(connection: ConnectionState): string {
+  if (connection.kind === 'authorizing' || connection.kind === 'probing') {
+    return connection.message;
+  }
   return 'Waking up your neighborhood…';
 }

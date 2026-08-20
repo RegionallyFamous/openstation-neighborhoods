@@ -15,6 +15,7 @@ All notable changes to OpenStation Neighborhoods are recorded here. The project 
 
 ### Changed
 
+- Saved-tab restoration now reports real progress, opens recovery details after ten seconds, and no longer waits for avatar media before entering the neighborhood.
 - Forward synchronization now drains Beeper's newest cursors and reconciles remote deletion tombstones.
 - Beeper API and OAuth traffic is pinned to `http://127.0.0.1:23373`.
 - Attachments load only after a user asks to download them.
@@ -22,6 +23,7 @@ All notable changes to OpenStation Neighborhoods are recorded here. The project 
 
 ### Removed
 
+- The install manifest for a mobile/PWA experience that the same-computer Beeper integration cannot support.
 - Reactions and their unused client, state, test, and interface code.
 - Title/alias room discovery now that every production room has an immutable canonical ID.
 
