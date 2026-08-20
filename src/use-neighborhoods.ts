@@ -207,6 +207,7 @@ export function useNeighborhoods(): NeighborhoodsController {
         if (!matrixAccount) {
           throw new Error('Beeper is running, but its Matrix account was not available.');
         }
+        const matrixAvatarURL = await resolveAvatarURL(client, matrixAccount.user?.imgURL);
         const initiallyMapped = mapBeeperChatsToChannels(
           flattenChannels(),
           initialChats,
@@ -267,7 +268,7 @@ export function useNeighborhoods(): NeighborhoodsController {
           mapped[0];
 
         clientRef.current = client;
-        const self = memberFromMatrixAccount(matrixAccount);
+        const self = memberFromMatrixAccount(matrixAccount, matrixAvatarURL);
         selfMemberRef.current = self;
         setMode('beeper');
         setChannels(mapped);
@@ -299,7 +300,7 @@ export function useNeighborhoods(): NeighborhoodsController {
             (matrixAccount.user?.id && shortMatrixIdentity(matrixAccount.user.id)) ||
             matrixAccount.user?.fullName ||
             'Beeper',
-          avatarUrl: matrixAccount.user?.imgURL,
+          avatarUrl: matrixAvatarURL,
         });
         if (first.beeperChatId) await hydrateMessages(first, client);
         return true;
@@ -625,7 +626,7 @@ function findMatrixAccount(accounts: BeeperAccount[]): BeeperAccount | undefined
   );
 }
 
-function memberFromMatrixAccount(account: BeeperAccount): Member {
+function memberFromMatrixAccount(account: BeeperAccount, avatarUrl?: string): Member {
   const id = account.user?.id || account.user?.username || account.accountID;
   const name = account.user?.username
     ? shortMatrixIdentity(account.user.username)
@@ -635,7 +636,7 @@ function memberFromMatrixAccount(account: BeeperAccount): Member {
     name,
     handle: shortMatrixIdentity(account.user?.id || account.user?.username || 'Matrix account'),
     avatar: initials(name),
-    avatarUrl: account.user?.imgURL,
+    avatarUrl,
     color: colorForID(id),
     presence: 'unknown',
     role: 'member',
@@ -701,6 +702,16 @@ function compactHandle(value: string): string {
 
 function shortMatrixIdentity(value: string): string {
   return value.replace(/:[^:]+$/, '');
+}
+
+async function resolveAvatarURL(client: BeeperClient, value?: string): Promise<string | undefined> {
+  if (!value) return undefined;
+  if (/^https:\/\//i.test(value)) return value;
+  try {
+    return await client.getAssetBlobURL(value);
+  } catch {
+    return undefined;
+  }
 }
 
 function initials(value: string): string {

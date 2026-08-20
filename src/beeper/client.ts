@@ -182,9 +182,22 @@ export class BeeperClient {
     );
   }
 
+  async getAssetBlobURL(value: string): Promise<string> {
+    const assetURL = value.trim();
+    if (!/^(?:mxc|localmxc|file):\/\//i.test(assetURL)) {
+      throw new BeeperApiError('Beeper returned an unsupported avatar URL.', 400);
+    }
+    const response = await this.request<Response>(
+      `/v1/assets/serve?url=${encodeURIComponent(assetURL)}`,
+      { responseType: 'raw' },
+    );
+    const blob = await response.blob();
+    return URL.createObjectURL(blob);
+  }
+
   private async request<T = unknown>(
     path: string,
-    options: RequestInit & { authenticated?: boolean } = {},
+    options: RequestInit & { authenticated?: boolean; responseType?: string } = {},
   ): Promise<T> {
     const headers = new Headers(options.headers);
     headers.set('Accept', 'application/json');
@@ -223,6 +236,7 @@ export class BeeperClient {
     }
 
     if (response.status === 204) return undefined as T;
+    if (options.responseType === 'raw') return response as T;
     return (await response.json()) as T;
   }
 }
@@ -349,7 +363,7 @@ function normalizeUser(value: unknown): BeeperUser | null {
     id,
     username: readString(raw.username) || undefined,
     fullName: readString(raw.fullName, raw.name) || undefined,
-    imgURL: normalizeResourceURL(readString(raw.imgURL, raw.avatarURL)),
+    imgURL: normalizeAvatarURL(readString(raw.imgURL, raw.avatarURL)),
     isSelf: Boolean(raw.isSelf),
     isAdmin: Boolean(raw.isAdmin),
     isPending: Boolean(raw.isPending),
@@ -487,6 +501,13 @@ export function normalizeResourceURL(value: string): string | undefined {
     return url.href;
   }
   return undefined;
+}
+
+function normalizeAvatarURL(value: string): string | undefined {
+  const candidate = value.trim();
+  if (!candidate) return undefined;
+  if (/^(?:mxc|localmxc|file):\/\//i.test(candidate)) return candidate;
+  return normalizeResourceURL(candidate);
 }
 
 export function isCanonicalMatrixRoomID(value: string): boolean {

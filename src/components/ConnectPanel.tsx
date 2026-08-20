@@ -144,18 +144,20 @@ export function ConnectPanel({
           <span className="connect-panel__mark"><OpenStationMark /></span>
           <div className="connect-panel__title">
             <span className="eyebrow">LOCAL CONNECTION</span>
-            <h1 id="connect-title">Bring your Beeper identity inside.</h1>
+            <h1 id="connect-title">Join OpenStation with Beeper.</h1>
             <PoweredByBeeper compact />
           </div>
           <button type="button" onClick={onClose} aria-label="Close connection panel"><X size={20} /></button>
         </header>
 
         <div className="connect-panel__art" aria-hidden="true">
-          <img src="/assets/openstation-neighborhoods-signal-garden.png" alt="" />
+          <img src="/assets/openstation-onboarding-hero-v2.png" alt="" />
           <span>BEEPER IDENTITY</span>
           <i />
           <span>BEEPER COMMUNITY</span>
         </div>
+
+        <p className="connect-panel__intro">Open Beeper Desktop, approve OpenStation once, and you’ll be inside the community.</p>
 
         <div
           className={`connection-readout connection-readout--${connection.kind}`}
@@ -189,15 +191,15 @@ export function ConnectPanel({
             <ol className="connection-steps">
               <li>
                 <span><Laptop size={20} /></span>
-                <div><strong>Keep Beeper Desktop open</strong><small>Version 4.2.936 or newer exposes the local API Neighborhoods uses.</small></div>
+                <div><strong>1. Keep Beeper Desktop open</strong><small>Use Beeper on this computer, version 4.2.936 or newer.</small></div>
               </li>
               <li>
                 <span><PlugZap size={20} /></span>
-                <div><strong>Enable its local integration</strong><small>In Beeper open Settings → Integrations and turn on the Desktop API.</small></div>
+                <div><strong>2. Turn on the Desktop API</strong><small>In Beeper, open Settings → Integrations and enable Desktop API.</small></div>
               </li>
               <li>
                 <span><ShieldCheck size={20} /></span>
-                <div><strong>Approve Neighborhoods</strong><small>Beeper shows the authorization screen. Approval lets OpenStation join its six supported public rooms and acknowledge read state; your password and encryption keys never enter this app.</small></div>
+                <div><strong>3. Approve OpenStation</strong><small>Beeper will show a permission screen. Approve it to join the six OpenStation rooms automatically.</small></div>
               </li>
             </ol>
 
@@ -209,7 +211,7 @@ export function ConnectPanel({
               onClick={() => void connectOAuth()}
             >
               {busy ? <LoaderCircle className="spin" size={19} /> : <PlugZap size={19} />}
-              {connection.kind === 'error' ? 'REAUTHORIZE WITH BEEPER' : 'CONNECT WITH BEEPER'}
+              {connection.kind === 'error' ? 'REAUTHORIZE WITH BEEPER' : 'JOIN OPENSTATION'}
               <ExternalLink size={16} />
             </button>
 

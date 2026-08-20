@@ -1141,6 +1141,13 @@ a {
   background: var(--void);
 }
 
+.connect-panel__intro {
+  margin: 16px 28px 4px;
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1.45;
+}
+
 .connect-panel__art::after {
   position: absolute;
   z-index: -1;
