@@ -12,25 +12,20 @@ import type {
   BeeperUser,
 } from './types';
 
-export interface MatrixInitialStateEvent {
-  type: string;
-  state_key?: string;
-  content: Record<string, unknown>;
-}
-
-export interface CreateMatrixRoomInput {
-  name: string;
-  topic?: string;
-  visibility?: 'public' | 'private';
-  preset?: 'private_chat' | 'public_chat' | 'trusted_private_chat';
-  creation_content?: Record<string, unknown>;
-  initial_state?: MatrixInitialStateEvent[];
-  power_level_content_override?: Record<string, unknown>;
-}
-
 export const DEFAULT_BEEPER_API_BASE =
   import.meta.env.VITE_BEEPER_API_BASE?.replace(/\/$/, '') ||
   'http://localhost:23373';
+
+const MAX_ASSET_BYTES = 12 * 1024 * 1024;
+const UNSAFE_ASSET_TYPES = new Set([
+  'application/javascript',
+  'application/xhtml+xml',
+  'application/xml',
+  'image/svg+xml',
+  'text/html',
+  'text/javascript',
+  'text/xml',
+]);
 
 export class BeeperApiError extends Error {
   readonly status: number;
@@ -171,21 +166,6 @@ export class BeeperClient {
     return roomID;
   }
 
-  async createRoom(input: CreateMatrixRoomInput): Promise<string> {
-    const response = await this.request<unknown>('/_matrix/client/v3/createRoom', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    });
-    const roomID = readString(asRecord(response).room_id, asRecord(response).roomID);
-    if (!isCanonicalMatrixRoomID(roomID)) {
-      throw new BeeperApiError(
-        'Beeper created the room but returned no canonical Matrix room ID.',
-        502,
-      );
-    }
-    return roomID;
-  }
-
   async sendMessage(chatID: string, text: string): Promise<string> {
     const response = await this.request<{ pendingMessageID: string }>(
       `/v1/chats/${encodeURIComponent(chatID)}/messages`,
@@ -287,7 +267,22 @@ export class BeeperClient {
   }
 
   private async responseToBlobURL(response: Response): Promise<string> {
+    const contentLength = Number(response.headers.get('Content-Length'));
+    if (Number.isFinite(contentLength) && contentLength > MAX_ASSET_BYTES) {
+      throw new BeeperApiError('This Beeper asset is too large to display safely.', 413);
+    }
+    const contentType = response.headers
+      .get('Content-Type')
+      ?.split(';', 1)[0]
+      .trim()
+      .toLowerCase();
+    if (contentType && (UNSAFE_ASSET_TYPES.has(contentType) || contentType.endsWith('+xml'))) {
+      throw new BeeperApiError('Beeper returned an unsafe asset type.', 415);
+    }
     const blob = await response.blob();
+    if (blob.size > MAX_ASSET_BYTES) {
+      throw new BeeperApiError('This Beeper asset is too large to display safely.', 413);
+    }
     const blobURL = URL.createObjectURL(blob);
     this.blobURLs.add(blobURL);
     return blobURL;
@@ -315,6 +310,7 @@ export class BeeperClient {
         headers,
         cache: 'no-store',
         credentials: 'omit',
+        redirect: 'error',
         referrerPolicy: 'no-referrer',
         signal: options.signal ?? AbortSignal.timeout(8_000),
       });

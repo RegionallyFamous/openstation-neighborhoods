@@ -278,6 +278,32 @@ describe('Beeper API v5 adapter', () => {
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:openstation-avatar');
   });
 
+  it('rejects active or oversized Beeper assets before creating a blob URL', async () => {
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL');
+    const client = new BeeperClient({ token: 'test-token' });
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response('<script>alert(1)</script>', {
+        status: 200,
+        headers: { 'Content-Type': 'text/html' },
+      }),
+    ));
+    await expect(client.resolveAssetURL('mxc://beeper.com/active')).rejects.toThrow(
+      'unsafe asset type',
+    );
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(null, {
+        status: 200,
+        headers: { 'Content-Length': String(13 * 1024 * 1024) },
+      }),
+    ));
+    await expect(client.resolveAssetURL('mxc://beeper.com/oversized')).rejects.toThrow(
+      'too large',
+    );
+    expect(createObjectURL).not.toHaveBeenCalled();
+  });
+
   it('fetches loopback image URLs with the bearer token instead of exposing them to img tags', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(new Blob(['avatar'], { type: 'image/png' }), { status: 200 }),

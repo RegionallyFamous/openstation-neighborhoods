@@ -3,18 +3,16 @@ import {
   FileText,
   Hash,
   LoaderCircle,
-  Menu,
   MessageCircle,
   Send,
   Smile,
   Users,
 } from 'lucide-react';
 import { FormEvent, Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import type { CommunityChannel, CommunityMessage, CommunityManifest } from '../types';
+import type { CommunityChannel, CommunityMessage } from '../types';
 import { OpenStationMark } from './OpenStationMark';
 
 interface MessageTimelineProps {
-  manifest: CommunityManifest;
   channel: CommunityChannel;
   messages: CommunityMessage[];
   mode: 'disconnected' | 'beeper';
@@ -24,13 +22,11 @@ interface MessageTimelineProps {
   onSend: (body: string) => Promise<void>;
   onReact: (messageId: string, key: string) => Promise<void>;
   onLoadOlder: () => Promise<void>;
-  onOpenChannels: () => void;
   onToggleMembers: () => void;
   onOpenConnect: () => void;
 }
 
 export function MessageTimeline({
-  manifest,
   channel,
   messages,
   mode,
@@ -40,7 +36,6 @@ export function MessageTimeline({
   onSend,
   onReact,
   onLoadOlder,
-  onOpenChannels,
   onToggleMembers,
   onOpenConnect,
 }: MessageTimelineProps) {
@@ -98,9 +93,6 @@ export function MessageTimeline({
   return (
     <main className="conversation">
       <header className="conversation-header">
-        <button className="conversation-header__mobile" type="button" onClick={onOpenChannels} aria-label="Open channels">
-          <Menu size={20} />
-        </button>
         <span className="conversation-header__hash"><Hash size={21} /></span>
         <div className="conversation-header__title">
           <strong>{channel.name}</strong>
@@ -130,13 +122,6 @@ export function MessageTimeline({
               <h1>#{channel.name}</h1>
             </div>
             <p>{channel.topic}</p>
-            <div className="channel-welcome__meta">
-              <span className={mode === 'beeper' && channel.joined ? 'is-live' : ''}>
-                <i aria-hidden="true" />
-                {mode === 'beeper' && channel.joined ? 'Connected with Beeper' : 'Beeper Neighborhood'}
-              </span>
-              <span>{readOnly ? 'Read-only updates' : 'Open conversation'}</span>
-            </div>
           </div>
           <div className="channel-welcome__signal" aria-hidden="true">
             <span className="channel-welcome__orbit channel-welcome__orbit--outer" />
@@ -282,7 +267,7 @@ function MessageGroup({
               </small>
             )}
             {message.attachments.map((attachment) => attachment.url ? (
-              <a className="message-attachment" href={attachment.url} key={attachment.id} target="_blank" rel="noreferrer">
+              <a className="message-attachment" href={attachment.url} key={attachment.id} download={attachment.name}>
                 <FileText size={19} />
                 <span><strong>{attachment.name}</strong><small>{attachment.size ? `${Math.ceil(attachment.size / 1024)} KB` : 'Attachment'}</small></span>
               </a>
@@ -299,6 +284,7 @@ function MessageGroup({
                   type="button"
                   key={`${reaction.key}-${reactionIndex}`}
                   disabled={reactionPendingMessageId === message.id || message.pending || message.delivery === 'failed'}
+                  aria-busy={reactionPendingMessageId === message.id}
                   aria-pressed={Boolean(reaction.mine)}
                   aria-label={`${reaction.mine ? 'Remove' : 'Add'} ${reaction.key} reaction`}
                   onClick={() => void onReact(message.id, reaction.key)}
@@ -306,7 +292,7 @@ function MessageGroup({
                   <span>{reaction.key}</span>{reaction.count}
                 </button>
               ))}
-              <button type="button" disabled={reactionPendingMessageId === message.id || message.pending || message.delivery === 'failed'} onClick={() => void onReact(message.id, '✨')} aria-label="Add sparkle reaction">
+              <button type="button" disabled={reactionPendingMessageId === message.id || message.pending || message.delivery === 'failed'} aria-busy={reactionPendingMessageId === message.id} onClick={() => void onReact(message.id, '✨')} aria-label="Add sparkle reaction">
                 <Smile size={14} />+
               </button>
             </div>

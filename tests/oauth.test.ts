@@ -39,17 +39,28 @@ describe('Beeper OAuth PKCE', () => {
     );
   });
 
-  it('keeps Beeper cancellation details while cleaning the callback URL', async () => {
+  it('verifies Beeper cancellation state, uses safe copy, and cleans the callback URL', async () => {
+    sessionStorage.setItem(
+      'openstation-neighborhoods:oauth-state',
+      JSON.stringify({
+        state: 'verified-state',
+        verifier: 'test-verifier',
+        clientID: 'test-client',
+        tokenEndpoint: 'http://127.0.0.1:23373/oauth/token',
+        redirectURI: `${window.location.origin}/`,
+      }),
+    );
     window.history.replaceState(
       {},
       '',
-      '/?error=access_denied&error_description=The+neighbor+said+no',
+      '/?error=access_denied&error_description=Untrusted+callback+copy&state=verified-state',
     );
 
     await expect(completeBeeperOAuthCallback()).rejects.toThrow(
-      'The neighbor said no',
+      'cancelled or declined',
     );
     expect(window.location.search).toBe('');
+    expect(sessionStorage.getItem('openstation-neighborhoods:oauth-state')).toBeNull();
   });
 
   it('clears stale tokens and client registration after Beeper restarts', () => {
@@ -81,6 +92,7 @@ describe('Beeper OAuth PKCE', () => {
     ).resolves.toBe(true);
     const [, init] = fetchMock.mock.calls[0];
     expect(init?.method).toBe('POST');
+    expect(init?.redirect).toBe('error');
     expect(String(init?.body)).toContain('token=approved-token');
   });
 

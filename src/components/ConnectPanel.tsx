@@ -1,5 +1,5 @@
-import { Check, ExternalLink, KeyRound, Laptop, LoaderCircle, PlugZap, Radio, ShieldCheck, X } from 'lucide-react';
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { Check, ExternalLink, Laptop, LoaderCircle, PlugZap, Radio, ShieldCheck, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import type { ConnectionState } from '../types';
 import { OpenStationMark } from './OpenStationMark';
 import { PoweredByBeeper } from './PoweredByBeeper';
@@ -12,7 +12,6 @@ interface ConnectPanelProps {
   onClose: () => void;
   onProbe: () => Promise<void>;
   onOAuth: () => Promise<void>;
-  onToken: (token: string) => Promise<void>;
   onDisconnect: () => void;
 }
 
@@ -24,16 +23,12 @@ export function ConnectPanel({
   onClose,
   onProbe,
   onOAuth,
-  onToken,
   onDisconnect,
 }: ConnectPanelProps) {
-  const [token, setToken] = useState('');
-  const [showToken, setShowToken] = useState(false);
   const [localError, setLocalError] = useState('');
   const dialogRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
   const previousFocusRef = useRef<HTMLElement | null>(null);
-  const tokenInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -97,12 +92,6 @@ export function ConnectPanel({
     };
   }, [open]);
 
-  useEffect(() => {
-    if (!open || !showToken) return;
-    const focusFrame = window.requestAnimationFrame(() => tokenInputRef.current?.focus());
-    return () => window.cancelAnimationFrame(focusFrame);
-  }, [open, showToken]);
-
   if (!open) return null;
 
   async function connectOAuth() {
@@ -111,19 +100,6 @@ export function ConnectPanel({
       await onOAuth();
     } catch (error) {
       setLocalError(error instanceof Error ? error.message : 'Could not connect.');
-    }
-  }
-
-  async function submitToken(event: FormEvent) {
-    event.preventDefault();
-    if (!token.trim()) return;
-    setLocalError('');
-    try {
-      await onToken(token);
-      setToken('');
-      onClose();
-    } catch (error) {
-      setLocalError(error instanceof Error ? error.message : 'That token did not work.');
     }
   }
 
@@ -220,36 +196,6 @@ export function ConnectPanel({
               <p><strong>Local means local.</strong> The access token stays in this browser session and the API remains bound to your computer. Neighborhoods never asks you to expose Beeper to the internet.</p>
             </div>
 
-            <button
-              className="manual-token-toggle"
-              type="button"
-              aria-expanded={showToken}
-              aria-controls="manual-token-form"
-              onClick={() => setShowToken((current) => !current)}
-            >
-              <KeyRound size={16} /> {showToken ? 'HIDE MANUAL TOKEN' : 'USE A MANUAL TOKEN INSTEAD'}
-            </button>
-            {showToken && (
-              <form className="token-form" id="manual-token-form" onSubmit={submitToken}>
-                <label>
-                  <span>BEEPER ACCESS TOKEN</span>
-                  <input
-                    ref={tokenInputRef}
-                    type="password"
-                    value={token}
-                    onChange={(event) => {
-                      setToken(event.target.value);
-                      setLocalError('');
-                    }}
-                    autoComplete="off"
-                    placeholder="Paste a token from Beeper Settings → Integrations"
-                    aria-invalid={errorMessage ? true : undefined}
-                    aria-describedby={errorMessage ? 'connect-error' : undefined}
-                  />
-                </label>
-                <button type="submit" disabled={!token.trim() || busy}>CONNECT</button>
-              </form>
-            )}
           </>
         )}
 

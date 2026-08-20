@@ -89,9 +89,3 @@ export type ConnectionState =
   | { kind: 'connected'; message: string; accountName?: string; accountHandle?: string; avatarUrl?: string }
   | { kind: 'unavailable'; message: string }
   | { kind: 'error'; message: string };
-
-export interface ProvisionedCommunity {
-  accountID: string;
-  spaceRoomId: string;
-  channelRoomIds: Record<string, string>;
-}

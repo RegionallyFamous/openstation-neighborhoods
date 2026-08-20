@@ -8,10 +8,6 @@ import { useNeighborhoods } from './use-neighborhoods';
 export default function App() {
   const neighborhoods = useNeighborhoods();
   const [connectOpen, setConnectOpen] = useState(true);
-  const [channelsOpen, setChannelsOpen] = useState(false);
-  const [channelsCompact, setChannelsCompact] = useState(
-    () => window.matchMedia('(max-width: 800px)').matches,
-  );
   const [membersCompact, setMembersCompact] = useState(
     () => window.matchMedia('(max-width: 1180px)').matches,
   );
@@ -19,24 +15,16 @@ export default function App() {
     () => !window.matchMedia('(max-width: 1180px)').matches,
   );
   const appShellRef = useRef<HTMLDivElement>(null);
-  const channelsTriggerRef = useRef<HTMLElement | null>(null);
   const membersTriggerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    const channelsLayout = window.matchMedia('(max-width: 800px)');
     const membersLayout = window.matchMedia('(max-width: 1180px)');
-    const updateChannelsLayout = (event: MediaQueryListEvent) => {
-      setChannelsCompact(event.matches);
-      setChannelsOpen(false);
-    };
     const updateMembersLayout = (event: MediaQueryListEvent) => {
       setMembersCompact(event.matches);
       if (event.matches) setMembersOpen(false);
     };
-    channelsLayout.addEventListener('change', updateChannelsLayout);
     membersLayout.addEventListener('change', updateMembersLayout);
     return () => {
-      channelsLayout.removeEventListener('change', updateChannelsLayout);
       membersLayout.removeEventListener('change', updateMembersLayout);
     };
   }, []);
@@ -45,27 +33,11 @@ export default function App() {
     if (neighborhoods.connection.kind === 'connected') setConnectOpen(false);
   }, [neighborhoods.connection.kind]);
 
-  const closeChannels = useCallback((restoreFocus = true) => {
-    setChannelsOpen(false);
-    if (restoreFocus) {
-      window.requestAnimationFrame(() => channelsTriggerRef.current?.focus());
-    }
-  }, []);
-
   const closeMembers = useCallback((restoreFocus = true) => {
     setMembersOpen(false);
     if (restoreFocus) {
       window.requestAnimationFrame(() => membersTriggerRef.current?.focus());
     }
-  }, []);
-
-  const toggleChannels = useCallback(() => {
-    setChannelsOpen((current) => {
-      if (!current && document.activeElement instanceof HTMLElement) {
-        channelsTriggerRef.current = document.activeElement;
-      }
-      return !current;
-    });
   }, []);
 
   const toggleMembers = useCallback(() => {
@@ -78,15 +50,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const channelTrigger = appShellRef.current?.querySelector<HTMLButtonElement>(
-      '.conversation-header__mobile',
-    );
-    if (channelTrigger) {
-      channelTrigger.setAttribute('aria-controls', 'channel-drawer');
-      channelTrigger.setAttribute('aria-expanded', String(channelsOpen));
-      channelTrigger.setAttribute('aria-label', channelsOpen ? 'Close channels' : 'Open channels');
-    }
-
     const memberTrigger = appShellRef.current?.querySelector<HTMLButtonElement>(
       '.conversation-header__tools > button:last-of-type',
     );
@@ -95,15 +58,7 @@ export default function App() {
       memberTrigger.setAttribute('aria-expanded', String(membersOpen));
       memberTrigger.setAttribute('aria-label', membersOpen ? 'Hide members' : 'Show members');
     }
-  }, [channelsOpen, membersOpen]);
-
-  useEffect(() => {
-    if (!channelsCompact || !channelsOpen) return;
-    const focusFrame = window.requestAnimationFrame(() => {
-      document.querySelector<HTMLElement>('#channel-drawer button:not([disabled])')?.focus();
-    });
-    return () => window.cancelAnimationFrame(focusFrame);
-  }, [channelsCompact, channelsOpen]);
+  }, [membersOpen]);
 
   useEffect(() => {
     if (!membersCompact || !membersOpen) return;
@@ -114,18 +69,16 @@ export default function App() {
   }, [membersCompact, membersOpen]);
 
   useEffect(() => {
-    if (!channelsOpen && !(membersCompact && membersOpen)) return;
+    if (!(membersCompact && membersOpen)) return;
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
-      if (channelsOpen) closeChannels();
-      else closeMembers();
+      closeMembers();
     };
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [channelsOpen, closeChannels, closeMembers, membersCompact, membersOpen]);
+  }, [closeMembers, membersCompact, membersOpen]);
 
-  const channelsHidden = channelsCompact && !channelsOpen;
   const membersHidden = !membersOpen;
 
   return (
@@ -140,8 +93,6 @@ export default function App() {
         <div
           className="drawer-shell"
           id="channel-drawer"
-          inert={channelsHidden}
-          aria-hidden={channelsHidden || undefined}
         >
           <ChannelSidebar
             manifest={neighborhoods.manifest}
@@ -149,17 +100,12 @@ export default function App() {
             selectedChannelId={neighborhoods.selectedChannel.id}
             connection={neighborhoods.connection}
             mode={neighborhoods.mode}
-            onSelectChannel={(channelId) => {
-              neighborhoods.selectChannel(channelId);
-              closeChannels();
-            }}
+            onSelectChannel={neighborhoods.selectChannel}
             onOpenConnect={() => setConnectOpen(true)}
             onDisconnect={neighborhoods.disconnect}
-            mobileOpen={channelsOpen}
           />
         </div>
         <MessageTimeline
-          manifest={neighborhoods.manifest}
           channel={neighborhoods.selectedChannel}
           messages={neighborhoods.messages}
           mode={neighborhoods.mode}
@@ -169,7 +115,6 @@ export default function App() {
           onSend={neighborhoods.sendMessage}
           onReact={neighborhoods.addReaction}
           onLoadOlder={neighborhoods.loadOlderMessages}
-          onOpenChannels={toggleChannels}
           onToggleMembers={toggleMembers}
           onOpenConnect={() => setConnectOpen(true)}
         />
@@ -186,25 +131,6 @@ export default function App() {
           />
         </div>
 
-        {channelsOpen && (
-          <button
-            className="mobile-scrim"
-            type="button"
-            aria-label="Close channels"
-            onClick={() => closeChannels()}
-          />
-        )}
-
-        <button
-          className={`connection-pill connection-pill--${neighborhoods.connection.kind}`}
-          type="button"
-          aria-haspopup="dialog"
-          onClick={() => setConnectOpen(true)}
-        >
-          <i aria-hidden="true" />
-          <span>{neighborhoods.connection.kind === 'connected' ? 'BEEPER LIVE' : neighborhoods.connection.kind === 'available' ? 'BEEPER READY' : 'CONNECT BEEPER'}</span>
-        </button>
-
       </div>
 
       <ConnectPanel
@@ -215,7 +141,6 @@ export default function App() {
         onClose={() => setConnectOpen(false)}
         onProbe={neighborhoods.probeBeeper}
         onOAuth={neighborhoods.connectWithOAuth}
-        onToken={neighborhoods.connectWithToken}
         onDisconnect={neighborhoods.disconnect}
       />
     </div>

@@ -5,6 +5,7 @@ import { ConnectPanel } from '../src/components/ConnectPanel';
 import {
   useNeighborhoods,
   resolveBeeperIdentityName,
+  toggleCommunityReaction,
   type NeighborhoodsController,
 } from '../src/use-neighborhoods';
 import { invalidTokenV5 } from './fixtures/beeper-v5';
@@ -46,6 +47,29 @@ afterEach(async () => {
 });
 
 describe('Neighborhoods connection controller', () => {
+  it('updates queued Beeper reactions immediately without double-counting', () => {
+    expect(toggleCommunityReaction([], '✨', true)).toEqual([
+      { key: '✨', count: 1, mine: true },
+    ]);
+    expect(
+      toggleCommunityReaction([{ key: '✨', count: 2 }], '✨', true),
+    ).toEqual([{ key: '✨', count: 3, mine: true }]);
+    expect(
+      toggleCommunityReaction(
+        [{ key: '✨', count: 3, mine: true }],
+        '✨',
+        false,
+      ),
+    ).toEqual([{ key: '✨', count: 2, mine: false }]);
+    expect(
+      toggleCommunityReaction(
+        [{ key: '✨', count: 1, mine: true }],
+        '✨',
+        false,
+      ),
+    ).toEqual([]);
+  });
+
   it('uses a real Beeper handle instead of the generic account placeholder', () => {
     expect(resolveBeeperIdentityName({
       id: '@nick:beeper.com',
@@ -128,7 +152,6 @@ describe('ConnectPanel recovery controls', () => {
           onClose: vi.fn(),
           onProbe: vi.fn().mockResolvedValue(undefined),
           onOAuth,
-          onToken: vi.fn().mockResolvedValue(undefined),
           onDisconnect: vi.fn(),
         }),
       );

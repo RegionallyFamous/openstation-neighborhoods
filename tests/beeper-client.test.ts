@@ -76,29 +76,6 @@ describe('Beeper response normalization', () => {
     );
   });
 
-  it('creates a Matrix room through Beeper Desktop', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ room_id: '!new-room:beeper.com' }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    );
-    vi.stubGlobal('fetch', fetchMock);
-
-    const client = new BeeperClient({ token: 'test-token' });
-    await expect(
-      client.createRoom({
-        name: 'OpenStation · General',
-        preset: 'public_chat',
-        visibility: 'public',
-      }),
-    ).resolves.toBe('!new-room:beeper.com');
-    expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:23373/_matrix/client/v3/createRoom',
-      expect.objectContaining({ method: 'POST' }),
-    );
-  });
-
   it('preserves a 401 status so the UI can recover from an invalid token', async () => {
     vi.stubGlobal(
       'fetch',

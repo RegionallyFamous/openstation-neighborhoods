@@ -11,7 +11,6 @@ interface ChannelSidebarProps {
   onSelectChannel: (channelId: string) => void;
   onOpenConnect: () => void;
   onDisconnect: () => void;
-  mobileOpen: boolean;
 }
 
 export function ChannelSidebar({
@@ -23,10 +22,9 @@ export function ChannelSidebar({
   onSelectChannel,
   onOpenConnect,
   onDisconnect,
-  mobileOpen,
 }: ChannelSidebarProps) {
   return (
-    <aside className={`channel-sidebar${mobileOpen ? ' is-mobile-open' : ''}`}>
+    <aside className="channel-sidebar">
       <header className="channel-sidebar__header">
         <div>
           <span className="eyebrow">BEEPER NEIGHBORHOOD</span>

@@ -6,11 +6,9 @@ import {
   completeBeeperOAuthCallback,
   disconnectBeeper,
   getStoredAccessToken,
-  getStoredAccessTokenSource,
   invalidateBeeperAuthorization,
   introspectBeeperAccessToken,
   revokeBeeperAccessToken,
-  storeManualAccessToken,
 } from './beeper/oauth';
 import type {
   BeeperAccount,
@@ -24,6 +22,7 @@ import type {
   ConnectionState,
   Member,
   MessageAttachment,
+  Reaction,
 } from './types';
 
 type Mode = 'disconnected' | 'beeper';
@@ -62,7 +61,6 @@ export interface NeighborhoodsController {
   loadOlderMessages: () => Promise<void>;
   probeBeeper: () => Promise<void>;
   connectWithOAuth: () => Promise<void>;
-  connectWithToken: (token: string) => Promise<void>;
   disconnect: () => void;
   resetConnection: () => void;
 }
@@ -773,24 +771,19 @@ export function useNeighborhoods(): NeighborhoodsController {
           ) {
             return;
           }
-          const refreshed = await client.getMessage(chatID, messageId);
-          const hydrated = await toCommunityMessage(
-            refreshed,
-            channel.id,
-            client,
-            memberStoreRef.current[channel.id] ?? [],
-          );
-          if (
-            generation !== syncGenerationRef.current ||
-            clientRef.current !== client
-          ) {
-            return;
-          }
           setMessageStore((current) => ({
             ...current,
-            [channel.id]: mergeCommunityMessages(
-              current[channel.id] ?? [],
-              [hydrated],
+            [channel.id]: (current[channel.id] ?? []).map((message) =>
+              message.id === messageId
+                ? {
+                    ...message,
+                    reactions: toggleCommunityReaction(
+                      message.reactions,
+                      key,
+                      !existingReaction?.mine,
+                    ),
+                  }
+                : message,
             ),
           }));
           return;
@@ -835,20 +828,6 @@ export function useNeighborhoods(): NeighborhoodsController {
     }
   }, []);
 
-  const connectWithToken = useCallback(
-    async (token: string) => {
-      const cleanToken = token.trim();
-      if (!cleanToken) throw new Error('Enter a Beeper access token.');
-
-      const connected = await loadBeeper(cleanToken);
-      if (!connected) {
-        throw new Error('That Beeper token is invalid or expired.');
-      }
-      storeManualAccessToken(cleanToken);
-    },
-    [loadBeeper],
-  );
-
   const resetConnection = useCallback(() => {
     clearConnectedState();
     setConnection({
@@ -859,11 +838,10 @@ export function useNeighborhoods(): NeighborhoodsController {
 
   const disconnect = useCallback(() => {
     const token = getStoredAccessToken();
-    const source = getStoredAccessTokenSource();
     const revocationEndpoint = oauthEndpointsRef.current.revocation;
     disconnectBeeper();
     resetConnection();
-    if (token && source === 'oauth') {
+    if (token) {
       void revokeBeeperAccessToken(token, revocationEndpoint).catch(() => {
         setConnection({
           kind: 'disconnected',
@@ -891,7 +869,6 @@ export function useNeighborhoods(): NeighborhoodsController {
       loadOlderMessages,
       probeBeeper,
       connectWithOAuth,
-      connectWithToken,
       disconnect,
       resetConnection,
     }),
@@ -900,7 +877,6 @@ export function useNeighborhoods(): NeighborhoodsController {
       canLoadOlder,
       channels,
       connectWithOAuth,
-      connectWithToken,
       connection,
       disconnect,
       isBusy,
@@ -1039,6 +1015,34 @@ function mergeCommunityMessages(
   });
   return [...merged.values()].sort(
     (a, b) => Date.parse(a.sentAt) - Date.parse(b.sentAt),
+  );
+}
+
+export function toggleCommunityReaction(
+  reactions: Reaction[],
+  key: string,
+  adding: boolean,
+): Reaction[] {
+  const existing = reactions.find((reaction) => reaction.key === key);
+
+  if (adding) {
+    if (!existing) return [...reactions, { key, count: 1, mine: true }];
+    if (existing.mine) return reactions;
+    return reactions.map((reaction) =>
+      reaction.key === key
+        ? { ...reaction, count: reaction.count + 1, mine: true }
+        : reaction,
+    );
+  }
+
+  if (!existing?.mine) return reactions;
+  if (existing.count <= 1) {
+    return reactions.filter((reaction) => reaction.key !== key);
+  }
+  return reactions.map((reaction) =>
+    reaction.key === key
+      ? { ...reaction, count: reaction.count - 1, mine: false }
+      : reaction,
   );
 }
 

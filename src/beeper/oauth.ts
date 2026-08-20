@@ -16,8 +16,6 @@ const ACCESS_TOKEN_KEY = 'openstation-neighborhoods:access-token';
 const ACCESS_TOKEN_SOURCE_KEY = 'openstation-neighborhoods:access-token-source';
 const ACCESS_TOKEN_EXPIRES_KEY = 'openstation-neighborhoods:access-token-expires';
 
-export type BeeperAccessTokenSource = 'oauth' | 'manual';
-
 interface OAuthPendingState {
   state: string;
   verifier: string;
@@ -41,17 +39,6 @@ export function getStoredAccessToken(): string | null {
   return sessionStorage.getItem(ACCESS_TOKEN_KEY);
 }
 
-export function storeManualAccessToken(token: string): void {
-  sessionStorage.setItem(ACCESS_TOKEN_KEY, token.trim());
-  sessionStorage.setItem(ACCESS_TOKEN_SOURCE_KEY, 'manual');
-  sessionStorage.removeItem(ACCESS_TOKEN_EXPIRES_KEY);
-}
-
-export function getStoredAccessTokenSource(): BeeperAccessTokenSource | null {
-  const source = sessionStorage.getItem(ACCESS_TOKEN_SOURCE_KEY);
-  return source === 'oauth' || source === 'manual' ? source : null;
-}
-
 export function disconnectBeeper(): void {
   oauthCallbackCompletion = null;
   sessionStorage.removeItem(ACCESS_TOKEN_KEY);
@@ -68,6 +55,7 @@ export function invalidateBeeperAuthorization(): void {
 export async function beginBeeperOAuth(
   baseUrl = DEFAULT_BEEPER_API_BASE,
 ): Promise<void> {
+  assertTrustedApplicationOrigin();
   const client = new BeeperClient({ baseUrl });
   const info = await client.getInfo();
   const metadata = await discoverOAuthMetadata(baseUrl);
@@ -142,25 +130,34 @@ async function exchangeOAuthCallback(currentURL: URL): Promise<string> {
   const code = currentURL.searchParams.get('code');
   const returnedState = currentURL.searchParams.get('state');
   const oauthError = currentURL.searchParams.get('error');
-  const oauthErrorDescription = currentURL.searchParams.get('error_description');
-
   clearOAuthQuery(currentURL);
-  if (oauthError) {
-    throw new Error(
-      oauthErrorDescription || `Beeper authorization failed: ${oauthError}`,
-    );
-  }
-
+  assertTrustedApplicationOrigin();
   const stored = sessionStorage.getItem(OAUTH_STATE_KEY);
-  if (!stored) throw new Error('The Beeper authorization session expired.');
-  const pending = JSON.parse(stored) as OAuthPendingState;
+  const pending = parseOAuthPendingState(stored);
   if (!returnedState || returnedState !== pending.state) {
+    sessionStorage.removeItem(OAUTH_STATE_KEY);
     throw new Error('The Beeper authorization response could not be verified.');
+  }
+  const expectedCallback = new URL(pending.redirectURI);
+  if (
+    expectedCallback.origin !== window.location.origin ||
+    expectedCallback.pathname !== window.location.pathname
+  ) {
+    sessionStorage.removeItem(OAUTH_STATE_KEY);
+    throw new Error('The Beeper authorization callback does not match this OpenStation page.');
+  }
+  if (oauthError) {
+    sessionStorage.removeItem(OAUTH_STATE_KEY);
+    throw new Error('Beeper authorization was cancelled or declined.');
+  }
+  if (!code) {
+    sessionStorage.removeItem(OAUTH_STATE_KEY);
+    throw new Error('Beeper did not return an authorization code.');
   }
 
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
-    code: code as string,
+    code,
     client_id: pending.clientID,
     redirect_uri: pending.redirectURI,
     code_verifier: pending.verifier,
@@ -174,6 +171,10 @@ async function exchangeOAuthCallback(currentURL: URL): Promise<string> {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
+    cache: 'no-store',
+    credentials: 'omit',
+    redirect: 'error',
+    referrerPolicy: 'no-referrer',
     signal: AbortSignal.timeout(8_000),
   });
   if (!response.ok) {
@@ -188,7 +189,6 @@ async function exchangeOAuthCallback(currentURL: URL): Promise<string> {
   }
 
   sessionStorage.setItem(ACCESS_TOKEN_KEY, token.access_token);
-  sessionStorage.setItem(ACCESS_TOKEN_SOURCE_KEY, 'oauth');
   if (token.expires_in) {
     sessionStorage.setItem(
       ACCESS_TOKEN_EXPIRES_KEY,
@@ -222,6 +222,7 @@ export async function introspectBeeperAccessToken(
     }),
     cache: 'no-store',
     credentials: 'omit',
+    redirect: 'error',
     referrerPolicy: 'no-referrer',
     signal: AbortSignal.timeout(8_000),
   });
@@ -256,6 +257,7 @@ export async function revokeBeeperAccessToken(
     }),
     cache: 'no-store',
     credentials: 'omit',
+    redirect: 'error',
     referrerPolicy: 'no-referrer',
     signal: AbortSignal.timeout(8_000),
   });
@@ -273,7 +275,13 @@ export async function createCodeChallenge(verifier: string): Promise<string> {
 async function discoverOAuthMetadata(baseUrl: string): Promise<BeeperOAuthMetadata> {
   const response = await fetch(
     `${baseUrl.replace(/\/$/, '')}/.well-known/oauth-authorization-server`,
-    { signal: AbortSignal.timeout(8_000) },
+    {
+      cache: 'no-store',
+      credentials: 'omit',
+      redirect: 'error',
+      referrerPolicy: 'no-referrer',
+      signal: AbortSignal.timeout(8_000),
+    },
   );
   if (!response.ok) {
     throw new Error(`Beeper OAuth discovery failed (${response.status}).`);
@@ -304,6 +312,34 @@ function validateLocalOAuthEndpoint(
   return endpoint.href;
 }
 
+function parseOAuthPendingState(value: string | null): OAuthPendingState {
+  if (!value) throw new Error('The Beeper authorization session expired.');
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    sessionStorage.removeItem(OAUTH_STATE_KEY);
+    throw new Error('The Beeper authorization session is invalid.');
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    sessionStorage.removeItem(OAUTH_STATE_KEY);
+    throw new Error('The Beeper authorization session is invalid.');
+  }
+  const pending = parsed as Record<string, unknown>;
+  const fields = ['state', 'verifier', 'clientID', 'tokenEndpoint', 'redirectURI'] as const;
+  if (fields.some((field) => typeof pending[field] !== 'string' || !pending[field])) {
+    sessionStorage.removeItem(OAUTH_STATE_KEY);
+    throw new Error('The Beeper authorization session is invalid.');
+  }
+  return pending as unknown as OAuthPendingState;
+}
+
+function assertTrustedApplicationOrigin(): void {
+  if (!import.meta.env.DEV && window.location.origin !== 'https://openstation.chat') {
+    throw new Error('Beeper connection is available only at https://openstation.chat.');
+  }
+}
+
 async function registerClient(
   registrationEndpoint: string,
   redirectURI: string,
@@ -321,6 +357,10 @@ async function registerClient(
       response_types: ['code'],
       token_endpoint_auth_method: 'none',
     }),
+    cache: 'no-store',
+    credentials: 'omit',
+    redirect: 'error',
+    referrerPolicy: 'no-referrer',
     signal: AbortSignal.timeout(8_000),
   });
   if (!response.ok) {

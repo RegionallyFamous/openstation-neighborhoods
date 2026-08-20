@@ -1,8 +1,10 @@
 {
-  "name": "OpenStation Neighborhoods",
-  "short_name": "Neighborhoods",
-  "description": "The OpenStation Beeper Neighborhood.",
+  "id": "/",
+  "name": "OpenStation",
+  "short_name": "OpenStation",
+  "description": "Join the OpenStation Beeper Neighborhood to meet makers, share projects, get help, and chat.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0c0b0f",
   "theme_color": "#0c0b0f",
