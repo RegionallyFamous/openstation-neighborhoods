@@ -1,0 +1,21 @@
+{
+  "name": "OpenStation Neighborhoods",
+  "short_name": "Neighborhoods",
+  "description": "A welcoming OpenStation community client carried by Beeper and Matrix.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0c0b0f",
+  "theme_color": "#0c0b0f",
+  "icons": [
+    {
+      "src": "/brand/openstation-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/brand/openstation-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

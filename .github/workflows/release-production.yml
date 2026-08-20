@@ -1,0 +1,71 @@
+name: Promote release to production
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: SpaceFast preview version to promote, such as v12 or ver_123
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openstation-chat-production
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SPACEFAST_TOKEN: ${{ secrets.SPACEFAST_TOKEN }}
+      SPACEFAST_VERSION: ${{ inputs.version }}
+    steps:
+      - name: Check out release revision
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: npm
+
+      - name: Use the locked npm release
+        run: npm install --global npm@11.18.0
+
+      - name: Install locked release tooling
+        run: npm ci --ignore-scripts
+
+      - name: Validate version reference
+        run: |
+          if [[ ! "$SPACEFAST_VERSION" =~ ^(v[0-9]+|ver_[A-Za-z0-9]+)$ ]]; then
+            echo "Invalid SpaceFast version reference" >&2
+            exit 2
+          fi
+
+      - name: Promote the tested version without rebuilding
+        run: |
+          npm exec -- sf rollback "$SPACEFAST_VERSION" \
+            --team openstation \
+            --space openstation-chat \
+            --channel live \
+            --wait \
+            --json | tee spacefast-production.json
+
+      - name: Smoke-test production metadata
+        run: |
+          curl --fail --silent --show-error https://openstation.chat/ >/dev/null
+          curl --fail --silent --show-error --head https://openstation.chat/ | grep -i '^content-security-policy:'
+          curl --fail --silent --show-error --head https://openstation.chat/ | grep -i '^referrer-policy:'
+          curl --fail --silent --show-error --head https://www.openstation.chat/ | grep -i '^location: https://openstation.chat/'
+
+      - name: Upload production receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: openstation-production-${{ github.sha }}-${{ inputs.version }}
+          path: spacefast-production.json
+          if-no-files-found: error
+          retention-days: 365
+

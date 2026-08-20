@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node:
+          - 22.13.0
+          - 24.x
+    env:
+      VITE_BEEPER_API_BASE: http://localhost:23373
+      VITE_BEEPER_OAUTH_SCOPE: ""
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Use the locked npm release
+        run: npm install --global npm@11.18.0
+
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run release checks
+        run: npm run check
+
+      - name: Verify deploy metadata
+        run: |
+          test -s dist/_headers
+          test -s dist/_redirects
+          grep -F "Content-Security-Policy:" dist/_headers
+          grep -F "http://localhost:23373" dist/_headers
+          grep -F "/* /index.html 200" dist/_redirects
+
+      - name: Audit dependency graph
+        run: npm audit --audit-level=high
+
+      - name: Upload reproducible web artifact
+        if: matrix.node == '24.x'
+        uses: actions/upload-artifact@v4
+        with:
+          name: openstation-neighborhoods-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30

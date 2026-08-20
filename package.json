@@ -1,0 +1,42 @@
+{
+  "name": "openstation-neighborhoods",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The hosted OpenStation community client for Matrix rooms carried by Beeper Desktop.",
+  "author": "OpenStation Contributors",
+  "license": "GPL-2.0-or-later",
+  "packageManager": "npm@11.18.0",
+  "engines": {
+    "node": ">=22.13.0 <27"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "deploy:spacefast": "npm run deploy:preview",
+    "deploy:preview": "npm run check && spacefast publish ./dist --team openstation --space openstation-chat --spa true --no-compress --target preview --wait --source-type git",
+    "release:promote": "spacefast rollback \"${SPACEFAST_VERSION:?Set SPACEFAST_VERSION to an approved preview version}\" --team openstation --space openstation-chat --channel live --wait",
+    "release:versions": "spacefast versions ls --team openstation --space openstation-chat",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -b --pretty false",
+    "check": "npm run typecheck && npm test && npm run build"
+  },
+  "dependencies": {
+    "lucide-react": "1.33.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.13",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "@vitejs/plugin-react": "6.0.5",
+    "jsdom": "30.0.1",
+    "typescript": "7.0.2",
+    "vite": "8.2.1",
+    "vitest": "4.1.11",
+    "spacefast": "0.0.13"
+  }
+}

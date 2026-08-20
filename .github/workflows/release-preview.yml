@@ -1,0 +1,76 @@
+name: Publish release preview
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openstation-chat-preview
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    environment: preview
+    env:
+      SPACEFAST_TOKEN: ${{ secrets.SPACEFAST_TOKEN }}
+      VITE_BEEPER_API_BASE: http://localhost:23373
+      VITE_BEEPER_OAUTH_SCOPE: ""
+    steps:
+      - name: Check out selected revision
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: npm
+
+      - name: Use the locked npm release
+        run: npm install --global npm@11.18.0
+
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Verify and build
+        run: npm run check
+
+      - name: Publish immutable preview
+        run: |
+          npm exec -- sf publish ./dist \
+            --team openstation \
+            --space openstation-chat \
+            --spa true \
+            --no-compress \
+            --target preview \
+            --wait \
+            --source-type git \
+            --git-branch "$GITHUB_REF_NAME" \
+            --git-commit "$GITHUB_SHA" \
+            --git-ref "$GITHUB_REF" \
+            --git-repository "$GITHUB_REPOSITORY" \
+            --message "Release preview for $GITHUB_SHA" \
+            --json | tee spacefast-preview.json
+
+      - name: Resolve immutable preview URL
+        run: |
+          PREVIEW_URL="$(node -e 'const fs = require("node:fs"); const receipt = JSON.parse(fs.readFileSync("spacefast-preview.json", "utf8")); const url = receipt?.data?.immutableUrl; if (!url) process.exit(2); process.stdout.write(url)')"
+          echo "PREVIEW_URL=$PREVIEW_URL" >> "$GITHUB_ENV"
+
+      - name: Smoke-test preview security metadata
+        run: |
+          curl --fail --silent --show-error --retry 6 --retry-delay 2 --retry-all-errors "$PREVIEW_URL" >/dev/null
+          curl --fail --silent --show-error --retry 6 --retry-delay 2 --retry-all-errors --head "$PREVIEW_URL" | grep -i '^content-security-policy:'
+          curl --fail --silent --show-error --retry 6 --retry-delay 2 --retry-all-errors --head "$PREVIEW_URL" | grep -i '^referrer-policy:'
+
+      - name: Upload preview receipt and artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openstation-preview-${{ github.sha }}
+          path: |
+            dist/
+            spacefast-preview.json
+          if-no-files-found: error
+          retention-days: 90
