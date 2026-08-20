@@ -111,9 +111,8 @@ export function MessageTimeline({
           <h1>Welcome to #{channel.name}</h1>
           <p>{channel.topic}</p>
           <div className="channel-welcome__meta">
-            <span>{new URL(manifest.publicUrl).hostname}</span>
-            <span>Built on Beeper</span>
-            <span>{mode === 'beeper' ? 'Carried by your Beeper account' : 'Connect Beeper for live data'}</span>
+            <span>OpenStation Beeper community</span>
+            <span>{mode === 'beeper' ? 'Your Beeper account' : 'Connect your Beeper account'}</span>
           </div>
         </section>
 
@@ -204,7 +203,7 @@ function MessageGroup({
   return (
     <article className="message-group">
       <span className="message-avatar" style={{ '--avatar-color': first.author.color } as React.CSSProperties}>
-        {first.author.avatar}
+        {first.author.avatarUrl ? <img src={first.author.avatarUrl} alt="" /> : first.author.avatar}
       </span>
       <div className="message-group__content">
         <header>

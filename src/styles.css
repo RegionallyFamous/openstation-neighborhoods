@@ -464,6 +464,15 @@ a {
   background: var(--coral);
 }
 
+.account-dock__avatar img,
+.message-avatar img,
+.member-row__avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
 .channel-link__unread { color: #272237; background: #77718f; }
 
 .channel-link__join {

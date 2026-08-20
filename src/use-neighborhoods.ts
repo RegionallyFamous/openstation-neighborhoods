@@ -299,6 +299,7 @@ export function useNeighborhoods(): NeighborhoodsController {
             (matrixAccount.user?.id && shortMatrixIdentity(matrixAccount.user.id)) ||
             matrixAccount.user?.fullName ||
             'Beeper',
+          avatarUrl: matrixAccount.user?.imgURL,
         });
         if (first.beeperChatId) await hydrateMessages(first, client);
         return true;
@@ -634,6 +635,7 @@ function memberFromMatrixAccount(account: BeeperAccount): Member {
     name,
     handle: shortMatrixIdentity(account.user?.id || account.user?.username || 'Matrix account'),
     avatar: initials(name),
+    avatarUrl: account.user?.imgURL,
     color: colorForID(id),
     presence: 'unknown',
     role: 'member',
@@ -644,12 +646,15 @@ function membersFromChats(users: BeeperUser[]): Member[] {
   const unique = new Map<string, Member>();
   users.forEach((user) => {
     if (!user.id || unique.has(user.id)) return;
-    const name = user.fullName || user.username || compactHandle(user.id);
+    const name = user.username
+      ? shortMatrixIdentity(user.username)
+      : user.fullName || compactHandle(user.id);
     unique.set(user.id, {
       id: user.id,
       name,
       handle: user.id,
       avatar: initials(name),
+      avatarUrl: user.imgURL,
       color: colorForID(user.id),
       presence: 'unknown',
       role: user.isAdmin ? 'moderator' : 'member',
@@ -671,6 +676,7 @@ function toCommunityMessage(message: BeeperMessage, channelId: string): Communit
       name,
       handle: message.senderID,
       avatar: initials(name),
+      avatarUrl: message.sender?.imgURL,
       color: colorForID(message.senderID),
       presence: 'unknown',
       role: message.sender?.isAdmin ? 'moderator' : 'member',

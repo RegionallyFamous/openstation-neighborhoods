@@ -45,6 +45,7 @@ export interface Member {
   name: string;
   handle: string;
   avatar: string;
+  avatarUrl?: string;
   color: string;
   presence: Presence;
   role: 'host' | 'moderator' | 'builder' | 'member';
@@ -82,7 +83,7 @@ export type ConnectionState =
   | { kind: 'probing'; message: string }
   | { kind: 'available'; message: string }
   | { kind: 'authorizing'; message: string }
-  | { kind: 'connected'; message: string; accountName?: string }
+  | { kind: 'connected'; message: string; accountName?: string; avatarUrl?: string }
   | { kind: 'unavailable'; message: string }
   | { kind: 'error'; message: string };
 

@@ -44,7 +44,7 @@ export function MemberRail({ members, open, onClose }: MemberRailProps) {
               {groupMembers.map((member) => (
                 <div className="member-row" key={member.id} aria-label={`${member.name}, ${member.note || member.handle}`}>
                   <span className="member-row__avatar" style={{ '--avatar-color': member.color } as React.CSSProperties}>
-                    {member.avatar}
+                    {member.avatarUrl ? <img src={member.avatarUrl} alt="" /> : member.avatar}
                   </span>
                   <span>
                     <strong>{member.name}</strong>
