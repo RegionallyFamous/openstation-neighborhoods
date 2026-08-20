@@ -125,7 +125,7 @@ a {
 .neighborhoods-shell {
   position: relative;
   display: grid;
-  grid-template-columns: 72px 276px minmax(410px, 1fr) 252px;
+  grid-template-columns: 276px minmax(410px, 1fr) 252px;
   width: 100%;
   height: 100%;
   overflow: hidden;
@@ -137,7 +137,7 @@ a {
 
 @media (min-width: 1181px) {
   .neighborhoods-shell.members-closed {
-    grid-template-columns: 72px 276px minmax(410px, 1fr) 0;
+    grid-template-columns: 276px minmax(410px, 1fr) 0;
   }
 
   .neighborhoods-shell.members-closed .member-rail {
@@ -1352,7 +1352,7 @@ a {
 .mobile-scrim { display: none; }
 
 @media (max-width: 1180px) {
-  .neighborhoods-shell { grid-template-columns: 70px 262px minmax(390px, 1fr); }
+  .neighborhoods-shell { grid-template-columns: 262px minmax(390px, 1fr); }
   .member-rail {
     position: fixed;
     z-index: 40;
@@ -1369,24 +1369,20 @@ a {
 }
 
 @media (max-width: 800px) {
-  .neighborhoods-shell { grid-template-columns: 58px minmax(0, 1fr); }
-  .community-rail { padding-inline: 5px; }
-  .community-rail__home,
-  .community-badge,
-  .community-rail__explore { width: 44px; height: 44px; }
+  .neighborhoods-shell { grid-template-columns: minmax(0, 1fr); }
   .channel-sidebar {
     position: fixed;
     z-index: 51;
     top: 0;
     bottom: 0;
-    left: 58px;
+    left: 0;
     width: min(280px, calc(100vw - 76px));
     translate: -110% 0;
     box-shadow: 22px 0 60px rgba(5, 3, 20, 0.55);
     transition: translate 180ms ease;
   }
   .channel-sidebar.is-mobile-open { translate: 0 0; }
-  .conversation { grid-column: 2; }
+  .conversation { grid-column: 1; }
   .conversation-header__mobile { display: grid; }
   .conversation-header__title span { display: none; }
   .conversation-header__tools > button:nth-child(1),
@@ -1415,9 +1411,8 @@ a {
 }
 
 @media (max-width: 520px) {
-  .neighborhoods-shell { grid-template-columns: 0 minmax(0, 1fr); }
-  .community-rail { display: none; }
-  .conversation { grid-column: 2; }
+  .neighborhoods-shell { grid-template-columns: minmax(0, 1fr); }
+  .conversation { grid-column: 1; }
   .channel-sidebar { left: 0; width: min(290px, 87vw); }
   .conversation-header { padding-inline: 9px; }
   .conversation-header__hash { display: none; }

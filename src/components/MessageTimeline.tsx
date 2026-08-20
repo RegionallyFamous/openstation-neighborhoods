@@ -112,7 +112,7 @@ export function MessageTimeline({
           <p>{channel.topic}</p>
           <div className="channel-welcome__meta">
             <span>{new URL(manifest.publicUrl).hostname}</span>
-            <span>Federated through Matrix</span>
+            <span>Built on Beeper</span>
             <span>{mode === 'beeper' ? 'Carried by your Beeper account' : 'Connect Beeper for live data'}</span>
           </div>
         </section>
@@ -123,7 +123,7 @@ export function MessageTimeline({
             <div>
               <span className="eyebrow">LIVE DATA ONLY</span>
               <h2>Connect Beeper to enter the neighborhood</h2>
-              <p>OpenStation will show only the Matrix rooms, messages, members, and unread state returned by your local Beeper app.</p>
+              <p>OpenStation will show only the rooms, messages, members, and unread state returned by your local Beeper app.</p>
             </div>
             <button type="button" onClick={onOpenConnect}>CONNECT BEEPER</button>
           </section>

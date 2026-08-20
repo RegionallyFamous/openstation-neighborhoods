@@ -154,7 +154,7 @@ export function ConnectPanel({
           <img src="/assets/openstation-neighborhoods-signal-garden.png" alt="" />
           <span>BEEPER IDENTITY</span>
           <i />
-          <span>OPEN MATRIX</span>
+          <span>BEEPER COMMUNITY</span>
         </div>
 
         <div
@@ -180,7 +180,7 @@ export function ConnectPanel({
             <span><Radio size={23} /></span>
             <div>
               <h2>You are connected.</h2>
-              <p>OpenStation automatically adds its Matrix rooms through your local Beeper app, then loads their real messages and members.</p>
+              <p>OpenStation automatically adds its community rooms through your local Beeper app, then loads their real messages and members.</p>
             </div>
             <button type="button" onClick={onDisconnect}>DISCONNECT</button>
           </div>

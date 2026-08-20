@@ -29,7 +29,7 @@ export function ChannelSidebar({
     <aside className={`channel-sidebar${mobileOpen ? ' is-mobile-open' : ''}`}>
       <header className="channel-sidebar__header">
         <div>
-          <span className="eyebrow">MATRIX NEIGHBORHOOD</span>
+          <span className="eyebrow">BEEPER COMMUNITY</span>
           <strong>{manifest.name}</strong>
         </div>
       </header>

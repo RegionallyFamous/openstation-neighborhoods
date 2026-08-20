@@ -295,9 +295,9 @@ export function useNeighborhoods(): NeighborhoodsController {
                 ? `${joined.length} of ${mapped.length} OpenStation rooms connected automatically`
                 : 'Beeper is connected; the OpenStation rooms are not reachable yet',
           accountName:
-            matrixAccount.user?.username ||
+            (matrixAccount.user?.username && shortMatrixIdentity(matrixAccount.user.username)) ||
+            (matrixAccount.user?.id && shortMatrixIdentity(matrixAccount.user.id)) ||
             matrixAccount.user?.fullName ||
-            matrixAccount.user?.id ||
             'Beeper',
         });
         if (first.beeperChatId) await hydrateMessages(first, client);
@@ -626,11 +626,13 @@ function findMatrixAccount(accounts: BeeperAccount[]): BeeperAccount | undefined
 
 function memberFromMatrixAccount(account: BeeperAccount): Member {
   const id = account.user?.id || account.user?.username || account.accountID;
-  const name = account.user?.username || account.user?.fullName || compactHandle(id);
+  const name = account.user?.username
+    ? shortMatrixIdentity(account.user.username)
+    : account.user?.fullName || compactHandle(id);
   return {
     id,
     name,
-    handle: account.user?.id || account.user?.username || 'Matrix account',
+    handle: shortMatrixIdentity(account.user?.id || account.user?.username || 'Matrix account'),
     avatar: initials(name),
     color: colorForID(id),
     presence: 'unknown',
@@ -689,6 +691,10 @@ function toCommunityMessage(message: BeeperMessage, channelId: string): Communit
 
 function compactHandle(value: string): string {
   return value.replace(/^@/, '').split(':')[0] || 'Neighbor';
+}
+
+function shortMatrixIdentity(value: string): string {
+  return value.replace(/:[^:]+$/, '');
 }
 
 function initials(value: string): string {

@@ -1,6 +1,6 @@
 # OpenStation Neighborhoods
 
-OpenStation Neighborhoods is a Discord-shaped web community carried by the Matrix account already inside Beeper Desktop. It gives OpenStation a warm, intentional gathering place without asking people to make another account or run another chat network.
+OpenStation Neighborhoods is a Discord-shaped Beeper community carried by the account already inside Beeper Desktop. It gives OpenStation a warm, intentional gathering place without asking people to make another account or run another chat network.
 
 The interface is an independent product that works with Beeper Desktop. Beeper is a third-party service and trademark; OpenStation does not operate or expose the Beeper API. See [`docs/BRANDING.md`](docs/BRANDING.md) for attribution and asset provenance.
 

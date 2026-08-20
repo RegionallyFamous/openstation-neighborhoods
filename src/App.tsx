@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChannelSidebar } from './components/ChannelSidebar';
-import { CommunityRail } from './components/CommunityRail';
 import { ConnectPanel } from './components/ConnectPanel';
 import { MemberRail } from './components/MemberRail';
 import { MessageTimeline } from './components/MessageTimeline';
@@ -138,7 +137,6 @@ export default function App() {
         aria-hidden={connectOpen || undefined}
       >
         <div className="app-grain" aria-hidden="true" />
-        <CommunityRail onConnect={() => setConnectOpen(true)} />
         <div
           className="drawer-shell"
           id="channel-drawer"
