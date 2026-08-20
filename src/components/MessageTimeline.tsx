@@ -141,7 +141,7 @@ export function MessageTimeline({
           onReadEligibilityChange(!readingBlocked && nearBottomRef.current);
         }}
       >
-        <section className="channel-welcome">
+        <section className="channel-welcome" key={channel.id}>
           <div className="channel-welcome__copy">
             <span className="channel-welcome__eyebrow">
               OPENSTATION <i aria-hidden="true" /> {channel.categoryName}

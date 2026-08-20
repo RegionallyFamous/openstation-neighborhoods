@@ -49,6 +49,8 @@
   --navy-3: #25222c;
   --navy-4: #302c38;
   --shadow: 0 22px 70px rgba(0, 0, 0, 0.48);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.22, 1.35, 0.36, 1);
 }
 
 * {
@@ -120,6 +122,19 @@ a {
     radial-gradient(circle at 82% 8%, rgba(233, 79, 243, 0.08), transparent 29%),
     radial-gradient(circle at 22% 100%, rgba(154, 242, 255, 0.045), transparent 33%),
     var(--obsidian);
+}
+
+.neighborhoods-app::before {
+  position: absolute;
+  z-index: 0;
+  inset: -12%;
+  content: '';
+  pointer-events: none;
+  opacity: 0.42;
+  background:
+    radial-gradient(circle at 74% 18%, rgba(236, 155, 255, 0.1), transparent 24%),
+    radial-gradient(circle at 28% 82%, rgba(154, 242, 255, 0.07), transparent 28%);
+  animation: ambient-drift 18s ease-in-out infinite alternate;
 }
 
 .neighborhoods-shell {
@@ -241,13 +256,16 @@ a {
   background:
     radial-gradient(circle at 15% 10%, rgba(154, 242, 255, 0.1), transparent 32%),
     linear-gradient(130deg, rgba(159, 152, 255, 0.12), rgba(233, 79, 243, 0.04));
-  transition: border-color 150ms ease, translate 150ms ease;
+  transition: border-color 180ms ease, translate 220ms var(--ease-out), box-shadow 220ms ease;
 }
 
 .neighborhood-card:hover {
-  translate: 0 -1px;
+  translate: 0 -2px;
   border-color: rgba(236, 155, 255, 0.4);
+  box-shadow: 0 12px 28px rgba(7, 4, 24, 0.2), 0 0 22px rgba(154, 242, 255, 0.04);
 }
+
+.neighborhood-card:active { translate: 0 0; scale: 0.985; }
 
 .neighborhood-card__mark {
   display: grid;
@@ -333,18 +351,24 @@ a {
   color: #9894b3;
   cursor: pointer;
   background: transparent;
-  transition: color 130ms ease, background 130ms ease;
+  transition: color 150ms ease, background 150ms ease, transform 180ms var(--ease-out);
 }
 
 .channel-link:hover {
   color: #dedaf6;
   background: rgba(255, 255, 255, 0.045);
+  transform: translateX(2px);
 }
+
+.channel-link:active { transform: translateX(1px) scale(0.985); }
+.channel-link:hover svg { transform: rotate(-6deg) scale(1.06); }
+.channel-link svg { transition: transform 190ms var(--ease-spring), color 150ms ease; }
 
 .channel-link.is-selected {
   color: white;
   background: linear-gradient(90deg, rgba(233, 79, 243, 0.18), rgba(159, 152, 255, 0.08));
   box-shadow: inset 3px 0 var(--pulse);
+  animation: channel-select 240ms var(--ease-out) both;
 }
 
 .channel-link.is-unjoined { color: #9a95ad; }
@@ -424,8 +448,10 @@ a {
 .account-dock__identity { display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; }
 .account-dock__identity strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .account-dock__identity small { overflow: hidden; font-size: 10px; text-overflow: ellipsis; color: var(--ink-faint); white-space: nowrap; }
-.account-dock button { display: grid; flex: 0 0 auto; place-items: center; width: 25px; height: 27px; padding: 0; border: 0; border-radius: 6px; color: #807b99; cursor: pointer; background: transparent; }
-.account-dock button:hover { color: white; background: var(--navy-3); }
+.account-dock button { display: grid; flex: 0 0 auto; place-items: center; width: 25px; height: 27px; padding: 0; border: 0; border-radius: 6px; color: #807b99; cursor: pointer; background: transparent; transition: color 150ms ease, background 150ms ease, transform 180ms var(--ease-spring); }
+.account-dock button:hover { color: white; background: var(--navy-3); transform: translateY(-1px); }
+.account-dock button:active { transform: scale(0.92); }
+.account-dock__avatar i { animation: arrival-pulse 720ms var(--ease-out) both; }
 
 /* Conversation */
 
@@ -513,9 +539,11 @@ a {
   color: #8f8aa7;
   cursor: pointer;
   background: transparent;
+  transition: color 150ms ease, background 150ms ease, transform 180ms var(--ease-spring);
 }
 
-.conversation-header__tools > button:hover { color: white; background: rgba(255, 255, 255, 0.05); }
+.conversation-header__tools > button:hover { color: white; background: rgba(255, 255, 255, 0.05); transform: translateY(-1px) scale(1.03); }
+.conversation-header__tools > button:active { transform: scale(0.92); }
 
 .message-scroll {
   min-height: 0;
@@ -542,6 +570,7 @@ a {
     radial-gradient(circle at 88% 15%, rgba(154, 242, 255, 0.13), transparent 26%),
     linear-gradient(135deg, rgba(58, 48, 112, 0.72), rgba(27, 23, 43, 0.94) 58%);
   box-shadow: 0 18px 48px rgba(6, 4, 20, 0.18), inset 0 1px rgba(255, 255, 255, 0.04);
+  animation: channel-card-in 420ms var(--ease-out) both;
 }
 
 .channel-welcome::before {
@@ -636,8 +665,8 @@ a {
   border-radius: 50%;
 }
 
-.channel-welcome__orbit--outer { width: 106px; height: 64px; rotate: -22deg; }
-.channel-welcome__orbit--inner { width: 78px; height: 105px; border-color: rgba(143, 239, 255, 0.18); rotate: 32deg; }
+.channel-welcome__orbit--outer { width: 106px; height: 64px; rotate: -22deg; animation: orbit-drift 11s ease-in-out infinite alternate; }
+.channel-welcome__orbit--inner { width: 78px; height: 105px; border-color: rgba(143, 239, 255, 0.18); rotate: 32deg; animation: orbit-drift-reverse 14s ease-in-out infinite alternate; }
 
 .channel-welcome__beacon {
   position: absolute;
@@ -648,6 +677,7 @@ a {
   border-radius: 50%;
   background: #9af2ff;
   box-shadow: 0 0 18px rgba(154, 242, 255, 0.75);
+  animation: beacon-breathe 2.8s ease-in-out infinite;
 }
 
 .channel-welcome__station {
@@ -657,6 +687,7 @@ a {
   place-items: center;
   filter: drop-shadow(0 9px 14px rgba(8, 5, 26, 0.45));
   rotate: -2deg;
+  animation: station-float 4.8s ease-in-out infinite;
 }
 
 .channel-welcome__station .openstation-mark { width: 76px; height: 76px; }
@@ -682,6 +713,7 @@ a {
   grid-template-columns: 42px minmax(0, 1fr);
   gap: 10px;
   padding: 4px 22px 11px;
+  transition: background 150ms ease;
 }
 
 .message-group:hover { background: rgba(255, 255, 255, 0.012); }
@@ -752,11 +784,15 @@ a {
   font: 650 11px/1 var(--font-mono);
   letter-spacing: 0.08em;
   cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, transform 180ms var(--ease-out), box-shadow 180ms ease;
 }
 .load-older-messages:hover:not(:disabled) {
   border-color: rgba(151, 136, 255, 0.55);
   background: rgba(95, 75, 185, 0.2);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(9, 6, 30, 0.18);
 }
+.load-older-messages:active:not(:disabled) { transform: translateY(0) scale(0.98); }
 .load-older-messages:disabled { cursor: wait; opacity: 0.7; }
 
 .message p {
@@ -790,9 +826,11 @@ a {
   text-decoration: none;
   cursor: pointer;
   background: rgba(9, 7, 26, 0.28);
+  transition: border-color 160ms ease, background 160ms ease, transform 180ms var(--ease-out);
 }
 
-.message-attachment:hover:not(:disabled) { border-color: var(--line-strong); background: rgba(255, 255, 255, 0.035); }
+.message-attachment:hover:not(:disabled) { border-color: var(--line-strong); background: rgba(255, 255, 255, 0.035); transform: translateY(-1px); }
+.message-attachment:active:not(:disabled) { transform: translateY(0) scale(0.985); }
 .message-attachment:disabled { cursor: wait; opacity: 0.72; }
 
 .message-attachment > span { display: flex; flex-direction: column; }
@@ -816,7 +854,9 @@ a {
 .join-room-card > div { flex: 1 1 auto; }
 .join-room-card h2 { margin: 3px 0 4px; font-size: 15px; }
 .join-room-card p { margin: 0; font-size: 12px; line-height: 1.55; color: var(--ink-dim); }
-.join-room-card > button { flex: 0 0 auto; padding: 9px 11px; border: 0; border-radius: 8px; font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.06em; color: #271d35; cursor: pointer; background: var(--yellow); }
+.join-room-card > button { flex: 0 0 auto; padding: 9px 11px; border: 0; border-radius: 8px; font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.06em; color: #271d35; cursor: pointer; background: var(--yellow); box-shadow: 0 8px 20px rgba(154, 242, 255, 0.08); transition: transform 180ms var(--ease-spring), box-shadow 180ms ease; }
+.join-room-card > button:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(154, 242, 255, 0.14); }
+.join-room-card > button:active { transform: scale(0.97); }
 
 .empty-channel { flex-direction: column; text-align: center; color: var(--ink-faint); border-color: var(--line); background: rgba(255, 255, 255, 0.018); }
 .empty-channel h2 { margin: 0; font-size: 15px; color: var(--ink); }
@@ -833,6 +873,7 @@ a {
   border-radius: 13px;
   background: #29252f;
   box-shadow: 0 9px 28px rgba(0, 0, 0, 0.24);
+  transition: border-color 180ms ease, box-shadow 220ms ease, transform 220ms var(--ease-out);
 }
 
 .composer textarea {
@@ -854,17 +895,20 @@ a {
   border-color: transparent;
   outline: 2px solid var(--sirius);
   outline-offset: 2px;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.3), 0 0 24px rgba(154, 242, 255, 0.05);
 }
 
 .composer textarea::placeholder { color: #77718e; }
 .composer textarea:disabled { cursor: not-allowed; }
-.composer button { display: grid; place-items: center; width: 29px; height: 29px; padding: 0; border: 0; border-radius: 8px; color: #8c87a4; cursor: pointer; background: transparent; }
+.composer button { display: grid; place-items: center; width: 29px; height: 29px; padding: 0; border: 0; border-radius: 8px; color: #8c87a4; cursor: pointer; background: transparent; transition: color 150ms ease, background 150ms ease, transform 180ms var(--ease-spring); }
 .composer button:hover:not(:disabled) { color: white; background: rgba(255, 255, 255, 0.055); }
 .composer button:disabled { opacity: 0.38; cursor: not-allowed; }
 .composer .composer__send {
   color: var(--void);
   background: linear-gradient(135deg, var(--nebula), var(--sirius));
 }
+.composer .composer__send:hover:not(:disabled) { transform: translate(1px, -1px) rotate(-4deg) scale(1.04); }
+.composer .composer__send:active:not(:disabled) { transform: translate(0, 0) scale(0.9); }
 
 /* Member rail */
 
@@ -1016,7 +1060,9 @@ a {
 .connect-panel__title { display: flex; flex-direction: column; align-items: flex-start; }
 .connect-panel__header h1 { margin: 3px 0 0; font-size: 20px; line-height: 1.14; letter-spacing: -0.035em; }
 .connect-panel__header .powered-by-beeper { margin-top: 7px; }
-.connect-panel__header > button { align-self: start; display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 9px; color: var(--ink-faint); cursor: pointer; background: rgba(255, 255, 255, 0.035); }
+.connect-panel__header > button { align-self: start; display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 9px; color: var(--ink-faint); cursor: pointer; background: rgba(255, 255, 255, 0.035); transition: color 150ms ease, background 150ms ease, transform 180ms var(--ease-spring); }
+.connect-panel__header > button:hover { color: var(--ink); background: rgba(255, 255, 255, 0.075); transform: rotate(4deg) scale(1.04); }
+.connect-panel__header > button:active { transform: scale(0.9); }
 
 .connect-panel__art {
   position: relative;
@@ -1064,6 +1110,7 @@ a {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: rgba(12, 11, 15, 0.38);
+  animation: status-in 220ms var(--ease-out) both;
 }
 
 .connection-readout__light { width: 9px; height: 9px; border-radius: 50%; background: #696477; }
@@ -1071,6 +1118,8 @@ a {
 .connection-readout--connected .connection-readout__light { background: var(--mint); box-shadow: 0 0 10px rgba(101, 216, 200, 0.7); }
 .connection-readout--unavailable .connection-readout__light,
 .connection-readout--error .connection-readout__light { background: var(--coral); }
+.connection-readout--probing .connection-readout__light,
+.connection-readout--authorizing .connection-readout__light { background: var(--nebula); animation: status-pulse 1.2s ease-in-out infinite; }
 .connection-readout > div { display: flex; flex-direction: column; gap: 2px; }
 .connection-readout strong { font-size: 12px; }
 .connection-readout small { font-size: 11px; color: var(--ink-faint); }
@@ -1086,7 +1135,11 @@ a {
   border-radius: 11px;
   cursor: pointer;
   background: rgba(154, 242, 255, 0.045);
+  transition: border-color 180ms ease, background 180ms ease, box-shadow 220ms ease, transform 180ms var(--ease-out);
 }
+.join-consent:hover { border-color: rgba(154, 242, 255, 0.34); transform: translateY(-1px); }
+.join-consent:has(input:checked) { border-color: rgba(154, 242, 255, 0.42); background: rgba(154, 242, 255, 0.075); box-shadow: 0 0 24px rgba(154, 242, 255, 0.045); }
+.join-consent input:checked { animation: consent-pop 260ms var(--ease-spring) both; }
 
 .join-consent input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--sirius); }
 .join-consent > span { display: flex; flex-direction: column; gap: 4px; }
@@ -1094,6 +1147,7 @@ a {
 .join-consent small { font-size: 10px; line-height: 1.4; color: var(--ink-dim); }
 
 .connect-primary {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1111,7 +1165,26 @@ a {
   cursor: pointer;
   background: linear-gradient(105deg, var(--nebula), var(--sirius));
   box-shadow: 0 12px 30px rgba(159, 152, 255, 0.16);
+  overflow: hidden;
+  transition: transform 190ms var(--ease-spring), box-shadow 190ms ease, filter 190ms ease;
 }
+
+.connect-primary::after {
+  position: absolute;
+  top: -40%;
+  bottom: -40%;
+  left: -30%;
+  width: 22%;
+  content: '';
+  pointer-events: none;
+  opacity: 0;
+  transform: skewX(-18deg);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.connect-primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 16px 38px rgba(159, 152, 255, 0.24); filter: saturate(1.08); }
+.connect-primary:hover:not(:disabled)::after { animation: button-sheen 680ms ease-out both; }
+.connect-primary:active:not(:disabled) { transform: translateY(0) scale(0.985); }
 
 .connect-primary:disabled { filter: grayscale(0.5); opacity: 0.42; cursor: not-allowed; }
 
@@ -1126,6 +1199,45 @@ a {
 }
 
 .connection-local-note svg { flex: 0 0 auto; color: var(--sirius); }
+
+.connect-progress {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+  margin: 9px 18px 0;
+}
+
+.connect-progress span {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+  font: 600 9px/1.2 'Geist Mono', ui-monospace, monospace;
+  letter-spacing: 0.03em;
+  color: #77718e;
+}
+
+.connect-progress i {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border: 1px solid #625d75;
+  border-radius: 50%;
+}
+
+.connect-progress .is-active { color: var(--ink); }
+.connect-progress .is-active i { border-color: var(--sirius); background: var(--sirius); box-shadow: 0 0 10px rgba(154, 242, 255, 0.6); animation: status-pulse 1.2s ease-in-out infinite; }
+.connect-progress .is-complete { color: #a9c7c3; }
+.connect-progress .is-complete i { border-color: var(--mint); background: var(--mint); }
+
+.connect-slow {
+  margin: 8px 18px 0;
+  font-size: 10px;
+  line-height: 1.4;
+  text-align: center;
+  color: #c7bdd2;
+  animation: status-in 200ms var(--ease-out) both;
+}
 
 .connect-troubleshooting {
   margin: -3px 18px 13px;
@@ -1159,6 +1271,7 @@ a {
   border: 1px solid rgba(101, 216, 200, 0.22);
   border-radius: 13px;
   background: rgba(101, 216, 200, 0.055);
+  animation: connected-pop 380ms var(--ease-spring) both;
 }
 
 .connected-card > span { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 13px; color: var(--mint); background: rgba(101, 216, 200, 0.1); }
@@ -1182,6 +1295,19 @@ a {
 @keyframes spin { to { rotate: 360deg; } }
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes panel-in { from { opacity: 0; translate: 0 8px; scale: 0.985; } }
+@keyframes ambient-drift { from { transform: translate3d(-1.5%, 0, 0) scale(1); } to { transform: translate3d(1.5%, -1%, 0) scale(1.025); } }
+@keyframes channel-card-in { from { opacity: 0; transform: translateY(8px) scale(0.992); } }
+@keyframes channel-select { from { opacity: 0.78; transform: translateX(-3px); } }
+@keyframes orbit-drift { from { transform: rotate(0deg) scale(0.98); } to { transform: rotate(16deg) scale(1.03); } }
+@keyframes orbit-drift-reverse { from { transform: rotate(0deg) scale(1.02); } to { transform: rotate(-13deg) scale(0.98); } }
+@keyframes beacon-breathe { 0%, 100% { opacity: 0.68; scale: 0.82; } 50% { opacity: 1; scale: 1.16; } }
+@keyframes station-float { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-4px) rotate(1deg); } }
+@keyframes status-in { from { opacity: 0; transform: translateY(4px); } }
+@keyframes status-pulse { 0%, 100% { opacity: 0.56; scale: 0.82; } 50% { opacity: 1; scale: 1.08; } }
+@keyframes arrival-pulse { 0% { opacity: 0; scale: 0.4; } 55% { scale: 1.45; } }
+@keyframes consent-pop { 50% { scale: 1.18; } }
+@keyframes connected-pop { from { opacity: 0; transform: translateY(7px) scale(0.98); } }
+@keyframes button-sheen { 0% { left: -30%; opacity: 0; } 18% { opacity: 0.55; } 100% { left: 112%; opacity: 0; } }
 
 @media (max-width: 1180px) {
   .neighborhoods-shell { grid-template-columns: 262px minmax(390px, 1fr); }
@@ -1257,6 +1383,8 @@ a {
   .connect-panel { width: 100%; height: auto; max-height: 100dvh; border: 0; border-bottom: 1px solid rgba(236, 155, 255, 0.22); border-radius: 0 0 18px 18px; }
   .connect-panel__art { height: 82px; margin-inline: 14px; }
   .connection-readout,
+  .connect-progress,
+  .connect-slow,
   .join-consent,
   .connection-local-note,
   .connect-troubleshooting,

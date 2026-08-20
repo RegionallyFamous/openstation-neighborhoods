@@ -27,6 +27,7 @@ export function ConnectPanel({
 }: ConnectPanelProps) {
   const [localError, setLocalError] = useState('');
   const [joinConsent, setJoinConsent] = useState(false);
+  const [slowConnection, setSlowConnection] = useState(false);
   const dialogRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -92,6 +93,17 @@ export function ConnectPanel({
   useEffect(() => {
     if (connection.kind !== 'error') setLocalError('');
   }, [connection.kind]);
+
+  const isConnecting = connection.kind === 'probing' || connection.kind === 'authorizing' || busy;
+
+  useEffect(() => {
+    if (!isConnecting) {
+      setSlowConnection(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setSlowConnection(true), 6_000);
+    return () => window.clearTimeout(timer);
+  }, [isConnecting]);
 
   if (!open) return null;
 
@@ -159,6 +171,30 @@ export function ConnectPanel({
           </div>
         )}
 
+        {mode !== 'beeper' && isConnecting && (
+          <>
+            <div className="connect-progress" aria-label="Beeper connection progress">
+              <span className={connection.kind === 'probing' ? 'is-active' : 'is-complete'}>
+                <i aria-hidden="true" />
+                Find Beeper
+              </span>
+              <span className={connection.kind === 'authorizing' || busy ? 'is-active' : ''}>
+                <i aria-hidden="true" />
+                Pass the invite
+              </span>
+              <span>
+                <i aria-hidden="true" />
+                Step inside
+              </span>
+            </div>
+            {slowConnection && (
+              <p className="connect-slow" role="status">
+                Still knocking. Check Beeper for an approval window.
+              </p>
+            )}
+          </>
+        )}
+
         {mode === 'beeper' ? (
           <div className="connected-card">
             <span><Check size={23} /></span>
@@ -185,12 +221,12 @@ export function ConnectPanel({
             <button
               className="connect-primary"
               type="button"
-              disabled={connection.kind === 'probing' || busy || !joinConsent}
-              aria-busy={connection.kind === 'probing' || busy}
+              disabled={isConnecting || !joinConsent}
+              aria-busy={isConnecting}
               onClick={() => void connectBeeper()}
             >
-              {connection.kind === 'probing' || busy ? <LoaderCircle className="spin" size={19} /> : <PlugZap size={19} />}
-              {connection.kind === 'probing' || busy
+              {isConnecting ? <LoaderCircle className="spin" size={19} /> : <PlugZap size={19} />}
+              {isConnecting
                 ? 'OPENING THE DOOR…'
                 : connection.kind === 'unavailable'
                   ? 'KNOCK AGAIN'
@@ -240,6 +276,7 @@ function readoutTitle(connection: ConnectionState): string {
   if (connection.kind === 'connected') return 'Beeper brought you in';
   if (connection.kind === 'available') return 'Beeper found. Nice.';
   if (connection.kind === 'probing') return 'Knocking on Beeper’s door…';
+  if (connection.kind === 'authorizing') return 'Passing the invite to Beeper…';
   if (connection.kind === 'unavailable') return 'No answer from Beeper yet';
   if (connection.kind === 'error') return 'Beeper needs a do-over';
   return 'Open Beeper and we’ll take it from there';

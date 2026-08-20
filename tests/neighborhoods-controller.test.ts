@@ -178,6 +178,33 @@ describe('Neighborhoods connection controller', () => {
 });
 
 describe('ConnectPanel recovery controls', () => {
+  it('shows concrete progress while Beeper approval is opening', async () => {
+    await act(async () => {
+      root?.render(
+        createElement(ConnectPanel, {
+          open: true,
+          connection: {
+            kind: 'authorizing',
+            message: 'Beeper has the invite. Waiting for your okay…',
+          },
+          mode: 'disconnected',
+          busy: true,
+          onClose: vi.fn(),
+          onProbe: vi.fn().mockResolvedValue(true),
+          onOAuth: vi.fn().mockResolvedValue(undefined),
+          onDisconnect: vi.fn(),
+        }),
+      );
+    });
+
+    expect(container.querySelector('.connect-progress')).not.toBeNull();
+    expect(container.textContent).toContain('Passing the invite to Beeper…');
+    expect(container.textContent).toContain('Find Beeper');
+    expect(container.textContent).toContain('Pass the invite');
+    expect(container.textContent).toContain('Step inside');
+    expect(container.querySelector<HTMLButtonElement>('.connect-primary')?.disabled).toBe(true);
+  });
+
   it('keeps the primary OAuth action usable after a connection error', async () => {
     const onOAuth = vi.fn().mockResolvedValue(undefined);
 
