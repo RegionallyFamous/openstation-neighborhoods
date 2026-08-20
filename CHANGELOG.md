@@ -16,6 +16,7 @@ All notable changes to OpenStation Neighborhoods are recorded here. The project 
 ### Changed
 
 - Saved-tab restoration now reports real progress, opens recovery details after ten seconds, and no longer waits for avatar media before entering the neighborhood.
+- HTML responses opt out of edge rewriting so analytics beacons cannot be injected into the token-bearing app shell.
 - Forward synchronization now drains Beeper's newest cursors and reconciles remote deletion tombstones.
 - Beeper API and OAuth traffic is pinned to `http://127.0.0.1:23373`.
 - Attachments load only after a user asks to download them.
