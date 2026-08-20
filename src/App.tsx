@@ -175,7 +175,7 @@ export default function App() {
             className="drawer-scrim"
             type="button"
             tabIndex={-1}
-            aria-label="Close navigation drawer"
+            aria-label="Close the open drawer"
             onClick={() => {
               if (channelsCompact && channelsOpen) closeChannels();
               if (membersCompact && membersOpen) closeMembers();

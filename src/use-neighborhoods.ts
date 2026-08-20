@@ -77,7 +77,7 @@ export function useNeighborhoods(): NeighborhoodsController {
   const [members, setMembers] = useState<Member[]>([]);
   const [connection, setConnection] = useState<ConnectionState>({
     kind: 'disconnected',
-    message: 'Connect Beeper Desktop to load your real Matrix rooms',
+    message: 'Open Beeper on this computer, then let’s go.',
   });
   const [isBusy, setIsBusy] = useState(false);
   const selectedChannelIdRef = useRef('general');
@@ -147,7 +147,7 @@ export function useNeighborhoods(): NeighborhoodsController {
       clearConnectedState();
       setConnection({
         kind: 'available',
-        message: 'Beeper restarted or the approval expired. Connect again for a fresh session.',
+        message: 'Beeper lost the handshake. Connect again and we’ll pick up where you left off.',
       });
       return true;
     },
@@ -333,7 +333,7 @@ export function useNeighborhoods(): NeighborhoodsController {
     async (token: string, allowAutomaticJoin = false) => {
       stopPolling();
       setIsBusy(true);
-      setConnection({ kind: 'authorizing', message: 'Opening the local Beeper door…' });
+      setConnection({ kind: 'authorizing', message: 'Opening the door through Beeper…' });
       const client = new BeeperClient({ token });
       try {
         const info = await client.getInfo();
@@ -354,7 +354,7 @@ export function useNeighborhoods(): NeighborhoodsController {
         ]);
         const matrixAccount = findMatrixAccount(accounts);
         if (!matrixAccount) {
-          throw new Error('Beeper is running, but its Matrix account was not available.');
+          throw new Error('Beeper is open, but your Beeper identity did not show up.');
         }
         if (
           matrixAccount.status &&
@@ -451,10 +451,10 @@ export function useNeighborhoods(): NeighborhoodsController {
           kind: 'connected',
           message:
             joined.length === mapped.length
-              ? `OpenStation is ready — the Space and ${joined.length} rooms connected automatically`
+              ? `All ${joined.length} rooms are open. Come on in.`
               : joined.length
-                ? `${joined.length} of ${mapped.length} OpenStation rooms connected automatically`
-                : 'Beeper is connected; the OpenStation rooms are not reachable yet',
+                ? `${joined.length} of ${mapped.length} rooms opened. The others need another knock.`
+                : 'Beeper is connected, but the rooms did not open yet.',
           accountName:
             self.name,
           accountHandle: self.handle,
@@ -715,7 +715,7 @@ export function useNeighborhoods(): NeighborhoodsController {
           current[channel.id] ?? [],
           pendingID,
           'unconfirmed',
-          'Sent to Beeper; confirmation is still pending.',
+              'Beeper has it. We’re still waiting for the delivery stamp.',
         ),
       }));
     },
@@ -767,7 +767,7 @@ export function useNeighborhoods(): NeighborhoodsController {
               sentAt: new Date().toISOString(),
               pending: true,
               delivery: 'pending',
-              deliveryMessage: 'Waiting for Beeper to confirm delivery.',
+              deliveryMessage: 'Handed to Beeper. Waiting for the delivery stamp.',
               attachments: [],
             },
           ],
@@ -800,20 +800,20 @@ export function useNeighborhoods(): NeighborhoodsController {
   }, []);
 
   const probeBeeper = useCallback(async () => {
-    setConnection({ kind: 'probing', message: 'Looking for Beeper Desktop…' });
+    setConnection({ kind: 'probing', message: 'Looking for Beeper on this computer…' });
     try {
       const client = new BeeperClient();
       const info = await client.getInfo();
       assertSupportedBeeperInfo(info);
       setConnection({
         kind: 'available',
-        message: `${info.app.name} ${info.app.version} is ready on this computer`,
+        message: `${info.app.name} ${info.app.version} found. Perfect.`,
       });
       return true;
     } catch {
       setConnection({
         kind: 'unavailable',
-        message: 'Beeper was not found on this computer',
+        message: 'No Beeper yet. Open the desktop app and try again.',
       });
       return false;
     }
@@ -821,11 +821,11 @@ export function useNeighborhoods(): NeighborhoodsController {
 
   const connectWithOAuth = useCallback(async (joinConsentAccepted: boolean) => {
     if (!joinConsentAccepted) {
-      throw new Error('Confirm the public-room notice before joining OpenStation.');
+      throw new Error('Tick the public-room box first, then we can open the door.');
     }
     window.localStorage.setItem(JOIN_CONSENT_KEY, JOIN_CONSENT_VERSION);
     setIsBusy(true);
-    setConnection({ kind: 'authorizing', message: 'Waiting for Beeper approval…' });
+    setConnection({ kind: 'authorizing', message: 'Beeper has the invite. Waiting for your okay…' });
     try {
       await beginBeeperOAuth();
     } catch (error) {
@@ -842,7 +842,7 @@ export function useNeighborhoods(): NeighborhoodsController {
     clearConnectedState();
     setConnection({
       kind: 'disconnected',
-      message: 'Connect Beeper Desktop to load your real Matrix rooms',
+      message: 'Open Beeper on this computer, then let’s go.',
     });
   }, [clearConnectedState]);
 
@@ -855,7 +855,7 @@ export function useNeighborhoods(): NeighborhoodsController {
       void revokeBeeperAccessToken(token, revocationEndpoint).catch(() => {
         setConnection({
           kind: 'disconnected',
-          message: 'Disconnected locally. Beeper could not confirm revocation because it was unavailable.',
+          message: 'You’re disconnected here. Beeper was offline, so it could not confirm the sign-out.',
         });
       });
     }

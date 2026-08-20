@@ -101,7 +101,7 @@ export function ConnectPanel({
       if (shouldProbe && !(await onProbe())) return;
       await onOAuth(joinConsent);
     } catch (error) {
-      setLocalError(error instanceof Error ? error.message : 'Could not connect.');
+      setLocalError(error instanceof Error ? error.message : 'The door did not open. Try once more.');
     }
   }
 
@@ -122,9 +122,9 @@ export function ConnectPanel({
         <header className="connect-panel__header">
           <span className="connect-panel__mark"><OpenStationMark /></span>
           <div className="connect-panel__title">
-            <span className="eyebrow">BEEPER NEIGHBORHOOD</span>
+            <span className="eyebrow">YOUR OPENSTATION INVITE</span>
             <h1 id="connect-title">
-              {mode === 'beeper' ? 'OpenStation is connected.' : 'Join OpenStation with Beeper.'}
+              {mode === 'beeper' ? 'Welcome to the neighborhood.' : 'Your seat is saved.'}
             </h1>
             <PoweredByBeeper compact />
           </div>
@@ -137,7 +137,7 @@ export function ConnectPanel({
               <img src="/assets/openstation-onboarding-hero-v2-ui.webp" alt="" />
             </div>
             <p className="connect-panel__intro">
-              Open Beeper on this computer, then connect. Beeper will ask you to approve OpenStation once.
+              Open Beeper on this computer and tap below. One quick approval, then you’re in.
             </p>
           </>
         )}
@@ -163,8 +163,8 @@ export function ConnectPanel({
           <div className="connected-card">
             <span><Check size={23} /></span>
             <div>
-              <h2>You’re inside.</h2>
-              <p>OpenStation is using your Beeper account on this computer.</p>
+              <h2>You made it.</h2>
+              <p>Beeper has the door open on this computer.</p>
             </div>
             <button type="button" onClick={onDisconnect}>DISCONNECT</button>
           </div>
@@ -177,7 +177,7 @@ export function ConnectPanel({
                 onChange={(event) => setJoinConsent(event.target.checked)}
               />
               <span>
-                <strong>Join six public OpenStation rooms</strong>
+                <strong>Count me in — join six public rooms</strong>
                 <small>Shared history is visible. Rooms are not end-to-end encrypted, and copies may remain with participating services.</small>
               </span>
             </label>
@@ -191,22 +191,22 @@ export function ConnectPanel({
             >
               {connection.kind === 'probing' || busy ? <LoaderCircle className="spin" size={19} /> : <PlugZap size={19} />}
               {connection.kind === 'probing' || busy
-                ? 'CONNECTING…'
+                ? 'OPENING THE DOOR…'
                 : connection.kind === 'unavailable'
-                  ? 'TRY AGAIN'
+                  ? 'KNOCK AGAIN'
                   : connection.kind === 'error'
-                    ? 'RECONNECT WITH BEEPER'
-                    : 'CONNECT WITH BEEPER'}
+                    ? 'START FRESH WITH BEEPER'
+                    : 'LET’S GO — CONNECT BEEPER'}
             </button>
 
             <p className="connection-local-note">
               <ShieldCheck size={15} aria-hidden="true" />
-              Your Beeper access stays on this computer.
+              Your Beeper key stays right here on this computer.
             </p>
 
             {connection.kind === 'unavailable' && (
               <details className="connect-troubleshooting">
-                <summary>Still not connecting?</summary>
+                <summary>Beeper still playing hard to get?</summary>
                 <p>
                   The Desktop API is normally ready automatically. In Beeper, open Settings → Integrations and confirm Desktop API is enabled. OpenStation requires Beeper 4.2.936 or newer.
                 </p>
@@ -237,10 +237,10 @@ function getFocusableElements(container: HTMLElement): HTMLElement[] {
 }
 
 function readoutTitle(connection: ConnectionState): string {
-  if (connection.kind === 'connected') return 'Beeper is connected';
-  if (connection.kind === 'available') return 'Beeper is ready';
-  if (connection.kind === 'probing') return 'Looking for Beeper…';
-  if (connection.kind === 'unavailable') return 'Open Beeper, then try again';
-  if (connection.kind === 'error') return 'Reconnect with Beeper';
-  return 'Open Beeper to get started';
+  if (connection.kind === 'connected') return 'Beeper brought you in';
+  if (connection.kind === 'available') return 'Beeper found. Nice.';
+  if (connection.kind === 'probing') return 'Knocking on Beeper’s door…';
+  if (connection.kind === 'unavailable') return 'No answer from Beeper yet';
+  if (connection.kind === 'error') return 'Beeper needs a do-over';
+  return 'Open Beeper and we’ll take it from there';
 }

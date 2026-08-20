@@ -35,7 +35,7 @@ export function ChannelSidebar({
       <button className="neighborhood-card" type="button" onClick={onOpenConnect}>
           <span className="neighborhood-card__mark"><OpenStationMark compact /></span>
         <span>
-          <strong>{mode === 'beeper' ? 'Beeper is carrying this' : 'Connect your Beeper'}</strong>
+          <strong>{mode === 'beeper' ? 'The door is open' : 'Bring your Beeper'}</strong>
           <small>{connection.message}</small>
         </span>
       </button>
@@ -83,8 +83,8 @@ export function ChannelSidebar({
           {connection.kind === 'connected' && <i />}
         </span>
         <span className="account-dock__identity">
-          <strong>{connection.kind === 'connected' ? connection.accountName || 'Beeper neighbor' : 'Not connected'}</strong>
-          <small>{connection.kind === 'connected' ? connection.accountHandle || 'Beeper account' : 'No Beeper account connected'}</small>
+          <strong>{connection.kind === 'connected' ? connection.accountName || 'Beeper neighbor' : 'Waiting at the door'}</strong>
+          <small>{connection.kind === 'connected' ? connection.accountHandle || 'Beeper account' : 'Open Beeper to come in'}</small>
         </span>
         <button type="button" aria-label="Connection settings" onClick={onOpenConnect}>
           <Settings2 size={16} />

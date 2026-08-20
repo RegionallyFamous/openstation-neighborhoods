@@ -19,16 +19,16 @@ export function MemberRail({ members, open, onClose }: MemberRailProps) {
     <aside className={`member-rail${open ? ' is-open' : ''}`}>
       <header className="member-rail__header">
         <div>
-          <span className="eyebrow">NEIGHBORHOOD DIRECTORY</span>
-          <strong>{members.length ? `${members.length} known neighbors` : 'Directory not loaded'}</strong>
+          <span className="eyebrow">WHO’S AROUND</span>
+          <strong>{members.length ? `${members.length} neighbors on the map` : 'The porch is quiet'}</strong>
         </div>
         <button type="button" aria-label="Close members" onClick={onClose}><X size={18} /></button>
       </header>
       <div className="member-rail__scroll">
         {!members.length && (
           <section className="empty-channel">
-            <h2>No member directory is available yet.</h2>
-            <p>Connect Beeper and open a joined room to load the identities Beeper returns.</p>
+            <h2>No neighbors on the map yet.</h2>
+            <p>Connect Beeper and open a room. The guest list will fill itself.</p>
           </section>
         )}
         {groups.map((group) => {
@@ -55,7 +55,7 @@ export function MemberRail({ members, open, onClose }: MemberRailProps) {
       <footer className="member-rail__footer">
         <span className="member-rail__source">
           <i aria-hidden="true" />
-          <span><strong>Room members</strong><small>Synced from Beeper · presence hidden</small></span>
+          <span><strong>Beeper guest list</strong><small>Real room members · presence stays private</small></span>
         </span>
         <a
           className="member-rail__beeper"

@@ -88,7 +88,7 @@ export function MessageTimeline({
       await onSend(body);
     } catch (error) {
       setDrafts((current) => ({ ...current, [targetChannelId]: body }));
-      setActionError(error instanceof Error ? error.message : 'The message could not be sent.');
+      setActionError(error instanceof Error ? error.message : 'That message missed the train. Your draft is safe.');
     }
   }
 
@@ -178,13 +178,13 @@ export function MessageTimeline({
                 })
                 .catch((error) => {
                   setActionError(
-                    error instanceof Error ? error.message : 'Older messages could not be loaded.',
+                    error instanceof Error ? error.message : 'The archives are being stubborn. Try again.',
                   );
                 });
             }}
           >
             {isLoadingOlder && <LoaderCircle className="spin" size={15} aria-hidden="true" />}
-            {isLoadingOlder ? 'LOADING EARLIER MESSAGES' : 'LOAD EARLIER MESSAGES'}
+            {isLoadingOlder ? 'DIGGING THROUGH THE ARCHIVES…' : 'DIG UP EARLIER MESSAGES'}
           </button>
         )}
 
@@ -192,21 +192,21 @@ export function MessageTimeline({
           <section className="join-room-card">
             <span className="join-room-card__icon"><AtSign size={24} /></span>
             <div>
-              <span className="eyebrow">LIVE DATA ONLY</span>
-              <h2>Connect Beeper to enter the neighborhood</h2>
-              <p>OpenStation will show only the rooms, messages, members, and unread state returned by your local Beeper app.</p>
+              <span className="eyebrow">BEEPER NEEDED</span>
+              <h2>Open Beeper and come on in</h2>
+              <p>We’ll bring over the real rooms, messages, neighbors, and unread counts from Beeper on this computer.</p>
             </div>
-            <button type="button" onClick={onOpenConnect}>CONNECT BEEPER</button>
+            <button type="button" onClick={onOpenConnect}>JOIN WITH BEEPER</button>
           </section>
         ) : !channel.joined ? (
           <section className="join-room-card">
             <span className="join-room-card__icon"><AtSign size={24} /></span>
             <div>
-              <span className="eyebrow">ROOM NOT CONNECTED</span>
-              <h2>#{channel.name} is not available in Beeper</h2>
-              <p>Automatic setup did not confirm this room. Open the connection details to reconnect Beeper and try setup again.</p>
+              <span className="eyebrow">DOOR STUCK</span>
+              <h2>#{channel.name} didn’t make it through</h2>
+              <p>Beeper couldn’t open this room. Reconnect and give it another try.</p>
             </div>
-            <button type="button" onClick={onOpenConnect}>CONNECTION DETAILS</button>
+            <button type="button" onClick={onOpenConnect}>FIX CONNECTION</button>
           </section>
         ) : grouped.length ? (
           <div role="log" aria-live="polite" aria-relevant="additions text" aria-busy={isBusy}>
@@ -228,8 +228,8 @@ export function MessageTimeline({
         ) : (
           <section className="empty-channel">
             <MessageCircle size={30} />
-            <h2>No messages are available from Beeper yet.</h2>
-            <p>{readOnly ? 'This announcement room may not have published anything yet.' : 'OpenStation will keep checking this joined room for messages.'}</p>
+            <h2>{readOnly ? 'Nothing pinned here yet.' : 'Suspiciously quiet in here.'}</h2>
+            <p>{readOnly ? 'When the hosts have news, it’ll land right here.' : 'Break the silence. Say hi, share a link, or start a tiny argument about fonts.'}</p>
           </section>
         )}
         {actionError && <p className="connect-error" role="alert">{actionError}</p>}
@@ -315,7 +315,7 @@ function MessageGroup({
                       download.click();
                     })
                     .catch((error) => {
-                      onError(error instanceof Error ? error.message : 'The attachment could not be opened.');
+                      onError(error instanceof Error ? error.message : 'Beeper couldn’t crack this file open.');
                     })
                     .finally(() => setDownloadingAttachmentId(null));
                 }}
@@ -325,10 +325,10 @@ function MessageGroup({
                   <strong>{attachment.name}</strong>
                   <small>
                     {downloadingAttachmentId === attachment.id
-                      ? 'Opening from Beeper…'
+                      ? 'Fetching from Beeper…'
                       : attachment.size
-                        ? `${Math.ceil(attachment.size / 1024)} KB · Download`
-                        : 'Download from Beeper'}
+                        ? `${Math.ceil(attachment.size / 1024)} KB · Fetch it`
+                        : 'Fetch from Beeper'}
                   </small>
                 </span>
               </button>
@@ -362,10 +362,13 @@ function composerPlaceholder(
   channel: CommunityChannel,
   readOnly: boolean,
 ): string {
-  if (mode === 'disconnected') return 'Connect Beeper to talk';
-  if (!channel.joined) return `${channel.name} is not connected`;
-  if (readOnly) return `${channel.name} is read-only`;
-  return `Message #${channel.name}`;
+  if (mode === 'disconnected') return 'Open Beeper to join the chat';
+  if (!channel.joined) return 'This room needs reconnecting';
+  if (readOnly) return 'Announcements land here';
+  if (channel.id === 'showcase') return 'Show us what you made…';
+  if (channel.id === 'builders') return 'What are you building?';
+  if (channel.id === 'help-desk') return 'What’s got you stuck?';
+  return `Drop a thought into #${channel.name}`;
 }
 
 function dayKey(value: string): string {
