@@ -274,10 +274,16 @@ export class BeeperClient {
         signal: options.signal ?? AbortSignal.timeout(8_000),
       });
     } catch (error) {
-      const detail = error instanceof Error ? error.message : 'Unknown connection error';
+      const timedOut = error instanceof DOMException && error.name === 'TimeoutError';
+      const aborted = error instanceof DOMException && error.name === 'AbortError';
       throw new BeeperApiError(
-        `Could not reach Beeper Desktop at ${this.baseUrl}. ${detail}`,
+        timedOut
+          ? 'Beeper Desktop did not answer before the request timed out.'
+          : aborted
+            ? 'The Beeper request was cancelled.'
+            : 'Could not reach Beeper Desktop on this computer.',
         0,
+        timedOut ? 'timeout' : aborted ? 'aborted' : 'network_error',
       );
     }
 
@@ -513,6 +519,7 @@ export function normalizeBeeperBaseUrl(value: string): string {
     throw new BeeperApiError(
       'The Beeper Desktop API must use http://127.0.0.1:23373 without credentials or a path.',
       0,
+      'unexpected_service',
     );
   }
   return url.origin;
@@ -528,10 +535,15 @@ export function assertSupportedBeeperInfo(info: BeeperInfo): void {
     throw new BeeperApiError(
       'This local service is not a supported Beeper Desktop connection.',
       0,
+      'unexpected_service',
     );
   }
   if (compareVersions(info.app.version, '4.2.936') < 0) {
-    throw new BeeperApiError('OpenStation requires Beeper Desktop 4.2.936 or newer.', 0);
+    throw new BeeperApiError(
+      'OpenStation requires Beeper Desktop 4.2.936 or newer.',
+      0,
+      'unsupported_version',
+    );
   }
 }
 

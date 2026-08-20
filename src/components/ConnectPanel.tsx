@@ -12,6 +12,7 @@ interface ConnectPanelProps {
   onClose: () => void;
   onProbe: () => Promise<boolean>;
   onOAuth: (joinConsentAccepted: boolean) => Promise<void>;
+  onRetry: (joinConsentAccepted: boolean) => Promise<void>;
   onDisconnect: () => void;
 }
 
@@ -23,12 +24,14 @@ export function ConnectPanel({
   onClose,
   onProbe,
   onOAuth,
+  onRetry,
   onDisconnect,
 }: ConnectPanelProps) {
   const [localError, setLocalError] = useState('');
   const [joinConsent, setJoinConsent] = useState(false);
   const [slowConnection, setSlowConnection] = useState(false);
   const dialogRef = useRef<HTMLElement>(null);
+  const actionRunningRef = useRef(false);
   const onCloseRef = useRef(onClose);
   const previousFocusRef = useRef<HTMLElement | null>(null);
 
@@ -108,17 +111,35 @@ export function ConnectPanel({
   if (!open) return null;
 
   async function connectBeeper() {
+    if (actionRunningRef.current) return;
+    actionRunningRef.current = true;
     setLocalError('');
     try {
+      if (
+        connection.kind === 'error' &&
+        connection.problem &&
+        connection.problem?.action !== 'reauthorize'
+      ) {
+        await onRetry(joinConsent);
+        return;
+      }
       if (shouldProbe && !(await onProbe())) return;
       await onOAuth(joinConsent);
     } catch (error) {
       setLocalError(error instanceof Error ? error.message : 'The door did not open. Try once more.');
+    } finally {
+      actionRunningRef.current = false;
     }
   }
 
   const shouldProbe = ['disconnected', 'unavailable'].includes(connection.kind);
-  const errorMessage = localError || (connection.kind === 'error' ? connection.message : '');
+  const errorMessage = localError;
+  const problem = connection.kind === 'error' || connection.kind === 'unavailable'
+    ? connection.problem
+    : undefined;
+  const retryingSavedSession = connection.kind === 'error' &&
+    problem !== undefined &&
+    problem.action !== 'reauthorize';
   const showReadout = mode !== 'beeper' && connection.kind !== 'disconnected';
 
   return (
@@ -157,8 +178,8 @@ export function ConnectPanel({
         {showReadout && (
           <div
             className={`connection-readout connection-readout--${connection.kind}`}
-            role={connection.kind === 'error' ? undefined : 'status'}
-            aria-live={connection.kind === 'error' ? undefined : 'polite'}
+            role={connection.kind === 'error' ? 'alert' : 'status'}
+            aria-live={connection.kind === 'error' ? 'assertive' : 'polite'}
             aria-atomic="true"
           >
             <span className="connection-readout__light" aria-hidden="true" />
@@ -197,12 +218,22 @@ export function ConnectPanel({
 
         {mode === 'beeper' ? (
           <div className="connected-card">
-            <span><Check size={23} /></span>
+            <span>{connection.kind === 'connected' && connection.health === 'reconnecting' ? <LoaderCircle className="spin" size={23} /> : <Check size={23} />}</span>
             <div>
-              <h2>You made it.</h2>
-              <p>This tab remembers you until it closes or Beeper restarts.</p>
+              <h2>{connection.kind === 'connected' && connection.health === 'reconnecting' ? 'Beeper is reconnecting.' : connection.kind === 'connected' && connection.health === 'partial' ? 'You’re in—with a room or two missing.' : 'You made it.'}</h2>
+              <p>{connection.kind === 'connected' ? connection.message : 'This tab remembers you until it closes or Beeper restarts.'}</p>
             </div>
-            <button type="button" onClick={onDisconnect}>DISCONNECT</button>
+            <div className="connected-card__actions">
+              {connection.kind === 'connected' && connection.health === 'reconnecting' && (
+                <button type="button" onClick={() => {
+                  setLocalError('');
+                  void onRetry(false).catch((error) => {
+                    setLocalError(error instanceof Error ? error.message : 'Beeper is still reconnecting.');
+                  });
+                }}>TRY NOW</button>
+              )}
+              <button type="button" onClick={onDisconnect}>DISCONNECT</button>
+            </div>
           </div>
         ) : (
           <>
@@ -221,7 +252,7 @@ export function ConnectPanel({
             <button
               className="connect-primary"
               type="button"
-              disabled={isConnecting || !joinConsent}
+              disabled={isConnecting || (!retryingSavedSession && !joinConsent)}
               aria-busy={isConnecting}
               onClick={() => void connectBeeper()}
             >
@@ -229,9 +260,9 @@ export function ConnectPanel({
               {isConnecting
                 ? 'OPENING THE DOOR…'
                 : connection.kind === 'unavailable'
-                  ? 'KNOCK AGAIN'
+                  ? problem?.actionLabel || 'KNOCK AGAIN'
                   : connection.kind === 'error'
-                    ? 'START FRESH WITH BEEPER'
+                    ? problem?.actionLabel || 'START FRESH WITH BEEPER'
                     : 'LET’S GO — CONNECT BEEPER'}
             </button>
 
@@ -240,11 +271,11 @@ export function ConnectPanel({
               Your Beeper key stays in this tab. Refreshing is fine; closing it asks again.
             </p>
 
-            {connection.kind === 'unavailable' && (
+            {(connection.kind === 'unavailable' || problem?.troubleshooting) && (
               <details className="connect-troubleshooting">
                 <summary>Beeper still playing hard to get?</summary>
                 <p>
-                  The Desktop API is normally ready automatically. In Beeper, open Settings → Integrations and confirm Desktop API is enabled. OpenStation requires Beeper 4.2.936 or newer.
+                  {problem?.troubleshooting || 'The Desktop API is normally ready automatically. In Beeper, open Settings → Integrations and confirm Desktop API is enabled. OpenStation requires Beeper 4.2.936 or newer.'}
                 </p>
               </details>
             )}
@@ -278,6 +309,6 @@ function readoutTitle(connection: ConnectionState): string {
   if (connection.kind === 'probing') return 'Knocking on Beeper’s door…';
   if (connection.kind === 'authorizing') return 'Passing the invite to Beeper…';
   if (connection.kind === 'unavailable') return 'No answer from Beeper yet';
-  if (connection.kind === 'error') return 'Beeper needs a do-over';
+  if (connection.kind === 'error') return connection.problem?.title || 'Beeper needs a do-over';
   return 'Open Beeper and we’ll take it from there';
 }

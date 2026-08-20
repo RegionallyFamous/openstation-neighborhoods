@@ -116,6 +116,22 @@ describe('Beeper OAuth PKCE', () => {
     expect(String(init?.body)).toContain('token=approved-token');
   });
 
+  it('classifies a failed local OAuth request without exposing the token', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('synthetic network failure')));
+
+    await expect(
+      introspectBeeperAccessToken(
+        'secret-approved-token',
+        'http://127.0.0.1:23373/oauth/introspect',
+      ),
+    ).rejects.toMatchObject({
+      name: 'BeeperApiError',
+      status: 0,
+      code: 'network_error',
+      message: expect.not.stringContaining('secret-approved-token'),
+    });
+  });
+
   it('rejects an OAuth endpoint on a different loopback origin', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

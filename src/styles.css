@@ -477,6 +477,8 @@ a {
 .account-dock button:hover { color: white; background: var(--navy-3); transform: translateY(-1px); }
 .account-dock button:active { transform: scale(0.92); }
 .account-dock__avatar i { animation: arrival-pulse 720ms var(--ease-out) both; }
+.account-dock__avatar i.is-reconnecting { background: var(--yellow); animation: status-pulse 1.2s ease-in-out infinite; }
+.account-dock__avatar i.is-partial { background: var(--yellow); }
 
 /* Conversation */
 
@@ -937,6 +939,27 @@ a {
 .join-room-card > button { flex: 0 0 auto; padding: 9px 11px; border: 0; border-radius: 8px; font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.06em; color: #271d35; cursor: pointer; background: var(--yellow); box-shadow: 0 8px 20px rgba(154, 242, 255, 0.08); transition: transform 180ms var(--ease-spring), box-shadow 180ms ease; }
 .join-room-card > button:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(154, 242, 255, 0.14); }
 .join-room-card > button:active { transform: scale(0.97); }
+.join-room-card > button:disabled { cursor: wait; opacity: 0.68; transform: none; }
+
+.sync-status-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  max-width: 760px;
+  margin: 12px auto;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 208, 91, 0.2);
+  border-radius: 11px;
+  color: var(--yellow);
+  background: rgba(255, 208, 91, 0.055);
+}
+.sync-status-card--error { border-color: rgba(255, 135, 110, 0.24); color: var(--coral); background: rgba(255, 135, 110, 0.055); }
+.sync-status-card > div { display: flex; flex-direction: column; gap: 2px; }
+.sync-status-card strong { font-size: 12px; color: var(--ink); }
+.sync-status-card small { font-size: 11px; line-height: 1.45; color: var(--ink-dim); }
+.sync-status-card button { min-height: 34px; padding: 7px 10px; border: 1px solid currentColor; border-radius: 8px; font-family: 'Geist Mono', monospace; font-size: 9px; letter-spacing: 0.06em; color: inherit; cursor: pointer; background: transparent; }
+.empty-channel--loading { color: var(--nebula); }
 
 .empty-channel { flex-direction: column; text-align: center; color: var(--ink-faint); border-color: var(--line); background: rgba(255, 255, 255, 0.018); }
 .empty-channel h2 { margin: 0; font-size: 15px; color: var(--ink); }
@@ -1357,7 +1380,9 @@ a {
 .connected-card > span { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 13px; color: var(--mint); background: rgba(101, 216, 200, 0.1); }
 .connected-card h2 { margin: 0 0 4px; font-size: 14px; }
 .connected-card p { margin: 0; font-size: 11px; line-height: 1.5; color: var(--ink-faint); }
+.connected-card__actions { display: flex; gap: 6px; align-items: center; }
 .connected-card button { padding: 8px 10px; border: 1px solid rgba(255, 135, 110, 0.25); border-radius: 7px; font-family: 'Geist Mono', monospace; font-size: 9px; color: var(--coral); cursor: pointer; background: rgba(255, 135, 110, 0.05); }
+.connected-card__actions button:first-child:not(:last-child) { border-color: rgba(154, 242, 255, 0.25); color: var(--sirius); background: rgba(154, 242, 255, 0.05); }
 
 .connect-error {
   margin: 10px 22px;
@@ -1476,6 +1501,10 @@ a {
   .join-room-card { align-items: flex-start; margin-inline: 12px; }
   .join-room-card { flex-wrap: wrap; }
   .join-room-card > button { width: 100%; min-height: 44px; }
+  .sync-status-card { grid-template-columns: auto minmax(0, 1fr); margin-inline: 12px; }
+  .sync-status-card button { grid-column: 1 / -1; min-height: 40px; }
+  .connected-card { grid-template-columns: 46px minmax(0, 1fr); }
+  .connected-card__actions { grid-column: 1 / -1; justify-content: flex-end; }
   .session-restore { top: 10px; width: calc(100% - 24px); }
 }
 

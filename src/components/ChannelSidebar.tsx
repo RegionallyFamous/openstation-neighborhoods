@@ -80,7 +80,9 @@ export function ChannelSidebar({
       <footer className="account-dock">
         <span className="account-dock__avatar">
           {connection.kind === 'connected' && connection.avatarUrl ? <img src={connection.avatarUrl} alt="" /> : connection.kind === 'connected' ? connection.accountName?.slice(0, 1).toUpperCase() || 'B' : 'OS'}
-          {connection.kind === 'connected' && <i />}
+          {connection.kind === 'connected' && (
+            <i className={connection.health === 'reconnecting' ? 'is-reconnecting' : connection.health === 'partial' ? 'is-partial' : ''} />
+          )}
         </span>
         <span className="account-dock__identity">
           <strong>{connection.kind === 'connected' ? connection.accountName || 'Beeper neighbor' : 'Waiting at the door'}</strong>

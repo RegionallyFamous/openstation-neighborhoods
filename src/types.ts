@@ -35,6 +35,8 @@ export interface CommunityChannel extends ChannelDefinition {
   beeperChatId?: string;
   joined: boolean;
   isReadOnly?: boolean;
+  connectionStatus?: 'not-joined' | 'joining' | 'joined' | 'failed';
+  connectionMessage?: string;
 }
 
 export type Presence = 'online' | 'idle' | 'offline' | 'unknown';
@@ -73,11 +75,26 @@ export interface CommunityMessage {
   attachments: MessageAttachment[];
 }
 
+export interface RoomSyncState {
+  kind: 'idle' | 'loading' | 'live' | 'retrying' | 'error';
+  message: string;
+  lastUpdatedAt?: number;
+}
+
+export interface ConnectionProblem {
+  code: string;
+  title: string;
+  message: string;
+  action: 'retry-probe' | 'reauthorize' | 'update-beeper' | 'fix-account' | 'retry-room' | 'retry-sync';
+  actionLabel: string;
+  troubleshooting?: string;
+}
+
 export type ConnectionState =
   | { kind: 'disconnected'; message: string }
   | { kind: 'probing'; message: string }
   | { kind: 'available'; message: string }
   | { kind: 'authorizing'; message: string }
-  | { kind: 'connected'; message: string; accountName?: string; accountHandle?: string; avatarUrl?: string }
-  | { kind: 'unavailable'; message: string }
-  | { kind: 'error'; message: string };
+  | { kind: 'connected'; message: string; health?: 'live' | 'partial' | 'reconnecting'; accountName?: string; accountHandle?: string; avatarUrl?: string }
+  | { kind: 'unavailable'; message: string; problem?: ConnectionProblem }
+  | { kind: 'error'; message: string; problem?: ConnectionProblem };

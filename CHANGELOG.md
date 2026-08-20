@@ -6,6 +6,8 @@ All notable changes to OpenStation Neighborhoods are recorded here. The project 
 
 ### Added
 
+- Actionable recovery states for Beeper availability, browser access, version, authorization, account health, room joins, rate limits, and live synchronization.
+- Per-room retry controls and visible loading, retrying, stale, and recovered synchronization feedback.
 - Release verification, preview, promotion, and rollback foundations.
 - Complete selected-room participant loading and authenticated Beeper asset streaming for account, member, message-author, and attachment media.
 - Cursor-based older-message loading, deterministic pending-send resolution, and send-status feedback.
@@ -15,6 +17,7 @@ All notable changes to OpenStation Neighborhoods are recorded here. The project 
 
 ### Changed
 
+- Saved-session recovery now reuses a valid token, failed rooms retry independently, and transient sync errors can no longer masquerade as a healthy live connection.
 - Saved sessions no longer wait on a redundant Matrix profile lookup, and slow read receipts no longer block message hydration.
 - Saved-tab restoration now reports real progress, opens recovery details after ten seconds, and no longer waits for avatar media before entering the neighborhood.
 - HTML responses opt out of edge rewriting so analytics beacons cannot be injected into the token-bearing app shell.

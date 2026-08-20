@@ -2,6 +2,7 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConnectPanel } from '../src/components/ConnectPanel';
+import { MessageTimeline } from '../src/components/MessageTimeline';
 import { MioCompanion } from '../src/components/MioCompanion';
 import { shouldRestoreBeeperSession } from '../src/App';
 import { flattenChannels } from '../src/community';
@@ -233,14 +234,18 @@ describe('Neighborhoods connection controller', () => {
 
     await act(async () => root?.render(createElement(Harness)));
     await flushReactUntil(
-      () => controller?.connection.kind === 'available' && !controller.isBusy,
+      () => controller?.connection.kind === 'error' && !controller.isBusy,
     );
 
     expect(controller).toMatchObject({
       mode: 'disconnected',
       connection: {
-        kind: 'available',
-        message: expect.stringContaining('Connect again'),
+        kind: 'error',
+        message: expect.stringContaining('approval expired'),
+        problem: {
+          code: 'authorization-expired',
+          action: 'reauthorize',
+        },
       },
       isBusy: false,
       messages: [],
@@ -280,6 +285,77 @@ describe('Mio companion', () => {
   });
 });
 
+describe('Room recovery surface', () => {
+  it('distinguishes loading from an empty room and retries only the failed room', async () => {
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: vi.fn(),
+    });
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn().mockReturnValue({ matches: false }),
+    });
+    const general = flattenChannels().find((channel) => channel.id === 'general')!;
+    const onRetryRoom = vi.fn().mockResolvedValue(undefined);
+    const commonProps = {
+      messages: [],
+      mode: 'beeper' as const,
+      isBusy: false,
+      canLoadOlder: false,
+      isLoadingOlder: false,
+      onSend: vi.fn().mockResolvedValue(undefined),
+      onLoadOlder: vi.fn().mockResolvedValue(undefined),
+      onRetryRoom,
+      onRetrySync: vi.fn(),
+      onResolveAttachment: vi.fn().mockResolvedValue('blob:fixture'),
+      onReadEligibilityChange: vi.fn(),
+      onToggleChannels: vi.fn(),
+      onToggleMembers: vi.fn(),
+      onOpenConnect: vi.fn(),
+      channelsOpen: false,
+      membersOpen: false,
+      blockedByDrawer: false,
+      readingBlocked: false,
+    };
+
+    await act(async () => {
+      root?.render(createElement(MessageTimeline, {
+        ...commonProps,
+        channel: {
+          ...general,
+          joined: true,
+          connectionStatus: 'joined',
+          beeperChatId: general.roomId,
+        },
+        sync: { kind: 'loading', message: 'Opening #general…' },
+      }));
+    });
+    expect(container.textContent).toContain('Opening #general');
+    expect(container.textContent).not.toContain('Suspiciously quiet');
+
+    await act(async () => {
+      root?.render(createElement(MessageTimeline, {
+        ...commonProps,
+        channel: {
+          ...general,
+          joined: false,
+          connectionStatus: 'failed',
+          connectionMessage: 'Beeper asked us to slow down.',
+        },
+        sync: { kind: 'idle', message: 'Waiting for Beeper.' },
+      }));
+    });
+    const retryButton = [...container.querySelectorAll('button')]
+      .find((button) => button.textContent?.includes('TRY THIS ROOM'));
+    await act(async () => {
+      retryButton?.click();
+    });
+    expect(onRetryRoom).toHaveBeenCalledWith('general');
+    expect(container.textContent).toContain('Beeper asked us to slow down.');
+  });
+});
+
 describe('ConnectPanel recovery controls', () => {
   it('shows concrete progress while Beeper approval is opening', async () => {
     await act(async () => {
@@ -295,6 +371,7 @@ describe('ConnectPanel recovery controls', () => {
           onClose: vi.fn(),
           onProbe: vi.fn().mockResolvedValue(true),
           onOAuth: vi.fn().mockResolvedValue(undefined),
+          onRetry: vi.fn().mockResolvedValue(undefined),
           onDisconnect: vi.fn(),
         }),
       );
@@ -324,6 +401,7 @@ describe('ConnectPanel recovery controls', () => {
           onClose: vi.fn(),
           onProbe: vi.fn().mockResolvedValue(true),
           onOAuth,
+          onRetry: vi.fn().mockResolvedValue(undefined),
           onDisconnect: vi.fn(),
         }),
       );
@@ -348,6 +426,91 @@ describe('ConnectPanel recovery controls', () => {
     expect(onOAuth).toHaveBeenCalledWith(true);
   });
 
+  it('retries a saved session instead of demanding another approval', async () => {
+    const onRetry = vi.fn().mockResolvedValue(undefined);
+    const onOAuth = vi.fn().mockResolvedValue(undefined);
+
+    await act(async () => {
+      root?.render(
+        createElement(ConnectPanel, {
+          open: true,
+          connection: {
+            kind: 'error',
+            message: 'Make sure Beeper Desktop is fully open, then try again.',
+            problem: {
+              code: 'desktop-timeout',
+              title: 'Beeper is taking too long',
+              message: 'Make sure Beeper Desktop is fully open, then try again.',
+              action: 'retry-probe',
+              actionLabel: 'TRY AGAIN',
+            },
+          },
+          mode: 'disconnected',
+          busy: false,
+          onClose: vi.fn(),
+          onProbe: vi.fn().mockResolvedValue(true),
+          onOAuth,
+          onRetry,
+          onDisconnect: vi.fn(),
+        }),
+      );
+    });
+
+    const button = container.querySelector<HTMLButtonElement>('button.connect-primary');
+    expect(button?.disabled).toBe(false);
+    await act(async () => {
+      button?.click();
+    });
+
+    expect(onRetry).toHaveBeenCalledWith(false);
+    expect(onOAuth).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('Beeper is taking too long');
+  });
+
+  it('coalesces repeated clicks while a recovery request is running', async () => {
+    let finishRetry: (() => void) | undefined;
+    const onRetry = vi.fn().mockReturnValue(new Promise<void>((resolve) => {
+      finishRetry = resolve;
+    }));
+
+    await act(async () => {
+      root?.render(createElement(ConnectPanel, {
+        open: true,
+        connection: {
+          kind: 'error',
+          message: 'Open Beeper and try again.',
+          problem: {
+            code: 'desktop-unreachable',
+            title: 'Beeper did not answer',
+            message: 'Open Beeper and try again.',
+            action: 'retry-probe',
+            actionLabel: 'CHECK FOR BEEPER',
+          },
+        },
+        mode: 'disconnected',
+        busy: false,
+        onClose: vi.fn(),
+        onProbe: vi.fn().mockResolvedValue(true),
+        onOAuth: vi.fn().mockResolvedValue(undefined),
+        onRetry,
+        onDisconnect: vi.fn(),
+      }));
+    });
+
+    const button = container.querySelector<HTMLButtonElement>('button.connect-primary');
+    await act(async () => {
+      button?.click();
+      button?.click();
+      await Promise.resolve();
+    });
+    expect(onRetry).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      finishRetry?.();
+      await Promise.resolve();
+    });
+  });
+
   it('checks for Beeper and starts approval from one connect action', async () => {
     const onProbe = vi.fn().mockResolvedValue(true);
     const onOAuth = vi.fn().mockResolvedValue(undefined);
@@ -365,6 +528,7 @@ describe('ConnectPanel recovery controls', () => {
           onClose: vi.fn(),
           onProbe,
           onOAuth,
+          onRetry: vi.fn().mockResolvedValue(undefined),
           onDisconnect: vi.fn(),
         }),
       );
@@ -399,6 +563,7 @@ describe('ConnectPanel recovery controls', () => {
           onClose: vi.fn(),
           onProbe: vi.fn().mockResolvedValue(false),
           onOAuth: vi.fn().mockResolvedValue(undefined),
+          onRetry: vi.fn().mockResolvedValue(undefined),
           onDisconnect: vi.fn(),
         }),
       );
@@ -420,6 +585,7 @@ describe('ConnectPanel recovery controls', () => {
           onClose: vi.fn(),
           onProbe: vi.fn().mockResolvedValue(false),
           onOAuth: vi.fn().mockResolvedValue(undefined),
+          onRetry: vi.fn().mockResolvedValue(undefined),
           onDisconnect: vi.fn(),
         }),
       );

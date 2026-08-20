@@ -187,8 +187,11 @@ export default function App() {
           isBusy={neighborhoods.isBusy}
           canLoadOlder={neighborhoods.canLoadOlder}
           isLoadingOlder={neighborhoods.isLoadingOlder}
+          sync={neighborhoods.selectedSync}
           onSend={neighborhoods.sendMessage}
           onLoadOlder={neighborhoods.loadOlderMessages}
+          onRetryRoom={neighborhoods.retryRoom}
+          onRetrySync={neighborhoods.retrySync}
           onResolveAttachment={neighborhoods.resolveAttachment}
           onReadEligibilityChange={neighborhoods.setReadEligible}
           onToggleChannels={toggleChannels}
@@ -234,6 +237,7 @@ export default function App() {
         onClose={() => setConnectOpen(false)}
         onProbe={neighborhoods.probeBeeper}
         onOAuth={neighborhoods.connectWithOAuth}
+        onRetry={neighborhoods.retryConnection}
         onDisconnect={neighborhoods.disconnect}
       />
       {restoringSession && (

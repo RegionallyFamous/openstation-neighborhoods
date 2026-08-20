@@ -8,7 +8,12 @@ import {
   Users,
 } from 'lucide-react';
 import { FormEvent, Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import type { CommunityChannel, CommunityMessage, MessageAttachment } from '../types';
+import type {
+  CommunityChannel,
+  CommunityMessage,
+  MessageAttachment,
+  RoomSyncState,
+} from '../types';
 import { MioCompanion } from './MioCompanion';
 
 interface MessageTimelineProps {
@@ -18,8 +23,11 @@ interface MessageTimelineProps {
   isBusy: boolean;
   canLoadOlder: boolean;
   isLoadingOlder: boolean;
+  sync: RoomSyncState;
   onSend: (body: string) => Promise<void>;
   onLoadOlder: () => Promise<void>;
+  onRetryRoom: (channelId: string) => Promise<void>;
+  onRetrySync: () => void;
   onResolveAttachment: (attachment: MessageAttachment) => Promise<string>;
   onReadEligibilityChange: (eligible: boolean) => void;
   onToggleChannels: () => void;
@@ -38,8 +46,11 @@ export function MessageTimeline({
   isBusy,
   canLoadOlder,
   isLoadingOlder,
+  sync,
   onSend,
   onLoadOlder,
+  onRetryRoom,
+  onRetrySync,
   onResolveAttachment,
   onReadEligibilityChange,
   onToggleChannels,
@@ -74,6 +85,10 @@ export function MessageTimeline({
     onReadEligibilityChange(!readingBlocked && nearBottomRef.current);
     return () => onReadEligibilityChange(false);
   }, [channel.id, onReadEligibilityChange, readingBlocked]);
+
+  useEffect(() => {
+    setActionError('');
+  }, [channel.id]);
 
   const grouped = useMemo(() => groupMessages(messages), [messages]);
 
@@ -160,6 +175,17 @@ export function MessageTimeline({
           </div>
         </section>
 
+        {mode === 'beeper' && channel.joined && ['retrying', 'error'].includes(sync.kind) && (
+          <section className={`sync-status-card sync-status-card--${sync.kind}`} role="status">
+            <LoaderCircle className={sync.kind === 'retrying' ? 'spin' : ''} size={18} aria-hidden="true" />
+            <div>
+              <strong>{sync.kind === 'retrying' ? 'Catching Beeper again…' : 'This room needs a nudge'}</strong>
+              <small>{sync.message}</small>
+            </div>
+            <button type="button" onClick={onRetrySync}>TRY NOW</button>
+          </section>
+        )}
+
         {mode === 'beeper' && channel.joined && canLoadOlder && (
           <button
             className="load-older-messages"
@@ -204,9 +230,26 @@ export function MessageTimeline({
             <div>
               <span className="eyebrow">DOOR STUCK</span>
               <h2>#{channel.name} didn’t make it through</h2>
-              <p>Beeper couldn’t open this room. Reconnect and give it another try.</p>
+              <p>{channel.connectionMessage || 'Beeper couldn’t open this room. Try this room again without reconnecting everything else.'}</p>
             </div>
-            <button type="button" onClick={onOpenConnect}>FIX CONNECTION</button>
+            <button
+              type="button"
+              disabled={channel.connectionStatus === 'joining'}
+              onClick={() => {
+                setActionError('');
+                void onRetryRoom(channel.id).catch((error) => {
+                  setActionError(error instanceof Error ? error.message : 'This room is still stuck. Try again in a moment.');
+                });
+              }}
+            >
+              {channel.connectionStatus === 'joining' ? 'KNOCKING…' : 'TRY THIS ROOM'}
+            </button>
+          </section>
+        ) : sync.kind === 'loading' && !grouped.length ? (
+          <section className="empty-channel empty-channel--loading" role="status">
+            <LoaderCircle className="spin" size={25} aria-hidden="true" />
+            <h2>Opening #{channel.name}…</h2>
+            <p>Fetching the latest messages from Beeper.</p>
           </section>
         ) : grouped.length ? (
           <div role="log" aria-live="polite" aria-relevant="additions text" aria-busy={isBusy}>

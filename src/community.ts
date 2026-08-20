@@ -94,6 +94,7 @@ export function flattenChannels(
       unreadCount: 0,
       mentionCount: 0,
       joined: false,
+      connectionStatus: 'not-joined',
     })),
   );
 }
@@ -122,6 +123,7 @@ export function mapBeeperChatsToChannels(
       unreadCount: match.unreadCount,
       mentionCount: match.unreadMentionsCount,
       joined: true,
+      connectionStatus: 'joined',
       isReadOnly: match.isReadOnly,
     };
   });

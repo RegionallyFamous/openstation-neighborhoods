@@ -173,7 +173,7 @@ async function exchangeOAuthCallback(currentURL: URL): Promise<string> {
     DEFAULT_BEEPER_API_BASE,
     'token',
   );
-  const response = await fetch(tokenEndpoint, {
+  const response = await fetchLocalOAuth(tokenEndpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
@@ -184,7 +184,11 @@ async function exchangeOAuthCallback(currentURL: URL): Promise<string> {
     signal: AbortSignal.timeout(8_000),
   });
   if (!response.ok) {
-    throw new Error(`Beeper could not finish authorization (${response.status}).`);
+    throw new BeeperApiError(
+      'Beeper could not finish the local authorization.',
+      response.status,
+      response.status === 401 ? 'unauthorized' : 'oauth_unavailable',
+    );
   }
   const token = (await response.json()) as BeeperTokenResponse;
   if (!token.access_token || token.token_type?.toLowerCase() !== 'bearer') {
@@ -219,7 +223,7 @@ export async function introspectBeeperAccessToken(
         baseUrl,
         'introspection',
       );
-  const response = await fetch(endpoint, {
+  const response = await fetchLocalOAuth(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -236,7 +240,11 @@ export async function introspectBeeperAccessToken(
     if (response.status === 401) {
       throw new BeeperApiError('Beeper authorization is invalid or expired.', 401, 'unauthorized');
     }
-    throw new Error(`Beeper could not validate the authorization (${response.status}).`);
+    throw new BeeperApiError(
+      'Beeper could not validate the saved authorization.',
+      response.status,
+      'oauth_unavailable',
+    );
   }
   const result = (await response.json()) as { active?: unknown };
   return result.active === true;
@@ -254,7 +262,7 @@ export async function revokeBeeperAccessToken(
         baseUrl,
         'revocation',
       );
-  const response = await fetch(endpoint, {
+  const response = await fetchLocalOAuth(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -268,7 +276,11 @@ export async function revokeBeeperAccessToken(
     signal: AbortSignal.timeout(8_000),
   });
   if (!response.ok) {
-    throw new Error(`Beeper could not revoke the authorization (${response.status}).`);
+    throw new BeeperApiError(
+      'Beeper could not revoke the local authorization.',
+      response.status,
+      'oauth_unavailable',
+    );
   }
 }
 
@@ -279,7 +291,7 @@ export async function createCodeChallenge(verifier: string): Promise<string> {
 }
 
 async function discoverOAuthMetadata(baseUrl: string): Promise<BeeperOAuthMetadata> {
-  const response = await fetch(
+  const response = await fetchLocalOAuth(
     `${baseUrl.replace(/\/$/, '')}/.well-known/oauth-authorization-server`,
     {
       cache: 'no-store',
@@ -290,7 +302,11 @@ async function discoverOAuthMetadata(baseUrl: string): Promise<BeeperOAuthMetada
     },
   );
   if (!response.ok) {
-    throw new Error(`Beeper OAuth discovery failed (${response.status}).`);
+    throw new BeeperApiError(
+      'Beeper did not provide its local authorization settings.',
+      response.status,
+      'oauth_unavailable',
+    );
   }
   return (await response.json()) as BeeperOAuthMetadata;
 }
@@ -354,7 +370,7 @@ async function registerClient(
   // Desktop API restarts can invalidate registered client IDs independently of
   // the browser's storage. Registration is local and side-effect free, so a
   // fresh public client is safer than reusing an unverifiable cached ID.
-  const response = await fetch(registrationEndpoint, {
+  const response = await fetchLocalOAuth(registrationEndpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -371,13 +387,38 @@ async function registerClient(
     signal: AbortSignal.timeout(8_000),
   });
   if (!response.ok) {
-    throw new Error(`Beeper rejected the local OAuth client (${response.status}).`);
+    throw new BeeperApiError(
+      'Beeper could not register OpenStation as a local client.',
+      response.status,
+      'oauth_unavailable',
+    );
   }
   const registration = (await response.json()) as BeeperOAuthClientRegistration;
   if (!registration.client_id?.trim()) {
     throw new Error('Beeper did not return a valid OAuth client ID.');
   }
   return registration.client_id;
+}
+
+async function fetchLocalOAuth(
+  input: string,
+  init: RequestInit,
+): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch (error) {
+    const timedOut = error instanceof DOMException && error.name === 'TimeoutError';
+    const aborted = error instanceof DOMException && error.name === 'AbortError';
+    throw new BeeperApiError(
+      timedOut
+        ? 'Beeper Desktop did not answer before the authorization request timed out.'
+        : aborted
+          ? 'The Beeper authorization request was cancelled.'
+          : 'Could not reach Beeper Desktop for local authorization.',
+      0,
+      timedOut ? 'timeout' : aborted ? 'aborted' : 'network_error',
+    );
+  }
 }
 
 function randomUrlSafeString(length: number): string {
