@@ -61,7 +61,7 @@ export function ProvisionPanel({
       </header>
       {result ? (
         <>
-          <p className="provision-panel__success"><Check size={16} /> Space and seven rooms created.</p>
+          <p className="provision-panel__success"><Check size={16} /> Space and six supported rooms created.</p>
           <pre data-testid="provision-result">{manifest}</pre>
           <button type="button" onClick={() => void copyManifest()}>
             <Copy size={15} /> COPY ROOM MANIFEST

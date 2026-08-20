@@ -295,7 +295,10 @@ export function useNeighborhoods(): NeighborhoodsController {
                 ? `${joined.length} of ${mapped.length} OpenStation rooms connected automatically`
                 : 'Beeper is connected; the OpenStation rooms are not reachable yet',
           accountName:
-            matrixAccount.user?.fullName || matrixAccount.user?.username || 'Beeper',
+            matrixAccount.user?.fullName ||
+            matrixAccount.user?.username ||
+            matrixAccount.user?.id ||
+            'Beeper',
         });
         if (first.beeperChatId) await hydrateMessages(first, client);
         return true;

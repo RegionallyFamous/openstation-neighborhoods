@@ -42,7 +42,7 @@ export function MemberRail({ members, open, onClose }: MemberRailProps) {
             <section className="member-group" key={group.key}>
               <h2>{group.label} — {groupMembers.length}</h2>
               {groupMembers.map((member) => (
-                <button className="member-row" type="button" disabled key={member.id} aria-label={`${member.name}, ${member.note || member.handle}`}>
+                <div className="member-row" key={member.id} aria-label={`${member.name}, ${member.note || member.handle}`}>
                   <span className="member-row__avatar" style={{ '--avatar-color': member.color } as React.CSSProperties}>
                     {member.avatar}
                   </span>
@@ -50,7 +50,7 @@ export function MemberRail({ members, open, onClose }: MemberRailProps) {
                     <strong>{member.name}</strong>
                     <small>{member.note || member.handle}</small>
                   </span>
-                </button>
+                </div>
               ))}
             </section>
           );

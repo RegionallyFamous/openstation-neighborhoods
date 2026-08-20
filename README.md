@@ -66,7 +66,7 @@ For development builds, **Use a manual token instead** accepts a token created i
 
 ## The community manifest
 
-The OpenStation community lives in [`src/community.ts`](src/community.ts). It describes Welcome, Announcements, General, Showcase, Builders, Help Desk, and Workbench Radio without exposing Matrix aliases in the product interface.
+The OpenStation community lives in [`src/community.ts`](src/community.ts). It describes Welcome, Announcements, General, Showcase, Builders, and Help Desk without exposing Matrix aliases in the product interface.
 
 The rooms and Space are created once by an operator through the documented setup procedure. After provisioning, their immutable `!roomID:beeper.com` identifiers are stored in the manifest. Members authorize Beeper once and Neighborhoods joins those IDs automatically; the public product identity remains `openstation.chat`.
 
@@ -91,8 +91,7 @@ The client uses serialized, visibility-aware HTTP synchronization for the select
 ## Deliberate limitations
 
 - Room provisioning is not included in the production member bundle; operators use the separate setup and governance runbooks.
-- Voice rooms are represented in the interface but are not implemented by the current Beeper Desktop API adapter.
-- Search, notification controls, threads, uploads, voice, and member moderation are outside the current release-candidate scope.
+- Search, notification controls, threads, uploads, voice, and member moderation are outside the current release-candidate scope and are not presented as active controls.
 - Room joining is automatic after Beeper authorization; the OpenStation Space and rooms still need one-time administrator provisioning.
 - The hosted build still talks to Beeper on the visitor's own computer. It therefore requires Beeper Desktop to be running and the browser to grant local-network access; no OpenStation server receives the Beeper token.
 

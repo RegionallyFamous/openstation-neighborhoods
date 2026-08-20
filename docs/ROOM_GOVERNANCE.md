@@ -11,7 +11,7 @@ state and the recovery procedure.
 
 ## Current production manifest
 
-Baseline observed on 2026-08-19: the Space and all seven rooms exist on
+Baseline observed on 2026-08-19: the Space and six supported rooms exist on
 `beeper.com`, report Matrix room version 11, allow public joins, forbid guest
 joins, are not world-readable, and have no advertised canonical alias. The
 provisioner set shared history and did not enable end-to-end encryption.
@@ -25,7 +25,6 @@ provisioner set shared history and did not enable end-to-end encryption.
 | `showcase` | Discussion | `!iXXipjdOmtOlNOBjFV:beeper.com` | Allowed |
 | `builders` | Discussion | `!VjKgltGsprslucAaLp:beeper.com` | Allowed |
 | `help-desk` | Discussion | `!xyMzRCglbiZDoNyjUH:beeper.com` | Allowed |
-| `workbench-radio` | Text placeholder | `!ihSEpBnsLGbOcHOkef:beeper.com` | Allowed; voice is not implemented |
 
 This table is a recovery aid, not a reason to skip live state validation. A
 Matrix room upgrade produces a replacement room with a new room ID, so every
@@ -34,7 +33,7 @@ reviewed release.
 
 ## Required state profile
 
-Apply and verify this profile separately in the Space and all seven rooms:
+Apply and verify this profile separately in the Space and all six supported rooms:
 
 | Setting | Space | Announcements | Discussions |
 | --- | --- | --- | --- |

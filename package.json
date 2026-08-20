@@ -15,7 +15,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "deploy:spacefast": "npm run deploy:preview",
-    "deploy:preview": "npm run check && spacefast publish ./dist --team openstation --space openstation-chat --spa true --no-compress --target preview --wait --source-type git",
+    "deploy:preview": "npm run check && spacefast publish ./dist --team openstation --space openstation-chat --spa true --target preview --wait --source-type git",
     "release:promote": "spacefast rollback \"${SPACEFAST_VERSION:?Set SPACEFAST_VERSION to an approved preview version}\" --team openstation --space openstation-chat --channel live --wait",
     "release:versions": "spacefast versions ls --team openstation --space openstation-chat",
     "test": "vitest run",
@@ -34,9 +34,9 @@
     "@types/react-dom": "19.2.4",
     "@vitejs/plugin-react": "6.0.5",
     "jsdom": "30.0.1",
+    "spacefast": "0.0.24",
     "typescript": "7.0.2",
     "vite": "8.2.1",
-    "vitest": "4.1.11",
-    "spacefast": "0.0.13"
+    "vitest": "4.1.11"
   }
 }

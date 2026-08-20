@@ -33,7 +33,7 @@ Members open `openstation.chat`, connect Beeper, and approve the local integrati
 
 ## Launch checks
 
-- Space and seven rooms created from the intended administrator account
+- Space and six supported rooms created from the intended administrator account
 - Stable Space and room IDs committed to `src/community.ts`
 - Welcome and Announcements tested as read-only for an ordinary member
 - Fresh Beeper account joins all rooms automatically

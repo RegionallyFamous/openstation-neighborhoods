@@ -1,4 +1,4 @@
-export type ChannelKind = 'announcement' | 'text' | 'voice';
+export type ChannelKind = 'announcement' | 'text';
 
 export interface CommunityManifest {
   id: string;

@@ -8,13 +8,13 @@ import {
 import type { BeeperChat } from '../src/beeper/types';
 
 describe('community manifest matching', () => {
-  it('keeps one stable Space and seven unique production room IDs', () => {
+  it('keeps one stable Space and six unique supported production room IDs', () => {
     const channels = flattenChannels();
     const roomIDs = channels.map((channel) => channel.roomId);
 
-    expect(channels).toHaveLength(7);
+    expect(channels).toHaveLength(6);
     expect(roomIDs.every(Boolean)).toBe(true);
-    expect(new Set(roomIDs)).toHaveLength(7);
+    expect(new Set(roomIDs)).toHaveLength(6);
   });
 
   it('normalizes friendly room titles and Matrix aliases', () => {

@@ -1,12 +1,9 @@
 import {
   AtSign,
   FileText,
-  Gift,
   Hash,
-  Image,
   Menu,
   MessageCircle,
-  Plus,
   Send,
   Smile,
   Users,
@@ -47,8 +44,7 @@ export function MessageTimeline({
   const previousChannel = useRef(channel.id);
   const draft = drafts[channel.id] ?? '';
   const readOnly = channel.kind === 'announcement';
-  const voiceUnavailable = channel.kind === 'voice';
-  const canCompose = mode === 'beeper' && channel.joined && !readOnly && !voiceUnavailable;
+  const canCompose = mode === 'beeper' && channel.joined && !readOnly;
 
   useEffect(() => {
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -170,7 +166,6 @@ export function MessageTimeline({
       </div>
 
       <form className="composer" onSubmit={submit}>
-        <button type="button" aria-label="Attachments are not available yet" title="Attachments are not available yet" disabled><Plus size={19} /></button>
         <textarea
           value={draft}
           onChange={(event) => {
@@ -183,14 +178,11 @@ export function MessageTimeline({
               event.currentTarget.form?.requestSubmit();
             }
           }}
-          placeholder={composerPlaceholder(mode, channel, readOnly, voiceUnavailable)}
+          placeholder={composerPlaceholder(mode, channel, readOnly)}
           aria-label={`Message ${channel.name}`}
           disabled={!canCompose || isBusy}
           rows={1}
         />
-        <button type="button" aria-label="Gifts are not available yet" title="Gifts are not available yet" disabled><Gift size={18} /></button>
-        <button type="button" aria-label="Images are not available yet" title="Images are not available yet" disabled><Image size={18} /></button>
-        <button type="button" aria-label="Emoji picker is not available yet" title="Emoji picker is not available yet" disabled><Smile size={18} /></button>
         <button className="composer__send" type="submit" aria-label="Send message" disabled={!canCompose || !draft.trim() || isBusy}>
           <Send size={17} />
         </button>
@@ -280,11 +272,9 @@ function composerPlaceholder(
   mode: 'disconnected' | 'beeper',
   channel: CommunityChannel,
   readOnly: boolean,
-  voiceUnavailable: boolean,
 ): string {
   if (mode === 'disconnected') return 'Connect Beeper to talk';
   if (!channel.joined) return `${channel.name} is not connected`;
-  if (voiceUnavailable) return 'Voice support is not available yet';
   if (readOnly) return `${channel.name} is read-only`;
   return `Message #${channel.name}`;
 }

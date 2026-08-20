@@ -1,12 +1,4 @@
-import {
-  ChevronDown,
-  Hash,
-  Headphones,
-  LogOut,
-  Megaphone,
-  Settings2,
-  Volume2,
-} from 'lucide-react';
+import { Hash, LogOut, Megaphone, Settings2 } from 'lucide-react';
 import type { CommunityChannel, CommunityManifest, ConnectionState } from '../types';
 import { OpenStationMark } from './OpenStationMark';
 
@@ -59,12 +51,7 @@ export function ChannelSidebar({
             {channels
               .filter((channel) => channel.categoryId === category.id)
               .map((channel) => {
-                const ChannelIcon =
-                  channel.kind === 'announcement'
-                    ? Megaphone
-                    : channel.kind === 'voice'
-                      ? Volume2
-                      : Hash;
+                const ChannelIcon = channel.kind === 'announcement' ? Megaphone : Hash;
                 return (
                   <button
                     className={`channel-link${
@@ -72,10 +59,8 @@ export function ChannelSidebar({
                     }${!channel.joined && mode === 'beeper' ? ' is-unjoined' : ''}`}
                     type="button"
                     key={channel.id}
-                    disabled={channel.kind === 'voice'}
                     onClick={() => onSelectChannel(channel.id)}
-                    aria-label={channel.kind === 'voice' ? `${channel.name} — voice support coming later` : undefined}
-                    title={channel.kind === 'voice' ? 'Voice support is not available in Neighborhoods yet' : !channel.joined && mode === 'beeper' ? `${channel.name} is not connected in Beeper` : channel.topic}
+                    title={!channel.joined && mode === 'beeper' ? `${channel.name} is not connected in Beeper` : channel.topic}
                   >
                     <ChannelIcon size={18} strokeWidth={2.1} />
                     <span>{channel.name}</span>
@@ -91,15 +76,6 @@ export function ChannelSidebar({
               })}
           </section>
         ))}
-      </div>
-
-      <div className="voice-card">
-        <div className="voice-card__signal"><i /><i /><i /></div>
-        <div>
-          <strong>Workbench radio</strong>
-          <small>Voice support coming later</small>
-        </div>
-        <button type="button" aria-label="Voice support is not available yet" disabled><Headphones size={17} /></button>
       </div>
 
       <footer className="account-dock">

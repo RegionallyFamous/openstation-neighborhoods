@@ -10,7 +10,7 @@ web client already provides.
 | Status | Release-candidate requirement |
 | Owner | OpenStation safety lead |
 | Review cadence | Quarterly, and after every material incident or room-policy change |
-| Scope | The OpenStation Space and all seven child rooms |
+| Scope | The OpenStation Space and all six supported child rooms |
 
 ## Required public disclosure
 
@@ -199,7 +199,7 @@ when staffing permits.
 ## Release-candidate safety gate
 
 - [ ] The public disclosure and code of conduct are visible before auto-join.
-- [ ] The join action clearly says it will join all seven public rooms.
+- [ ] The join action clearly says it will join all six supported public rooms.
 - [ ] A report reaches the private OpenStation queue and gets an audit ID.
 - [ ] Matrix report delivery is treated as supplemental, not authoritative.
 - [ ] Two moderators can redact, kick, ban, unban, and enforce a cross-room ban.

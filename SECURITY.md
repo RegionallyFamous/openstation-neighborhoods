@@ -16,4 +16,4 @@ Neighborhoods talks directly from the visitor's browser to Beeper Desktop on loo
 
 ## Tracked development-tool advisory
 
-SpaceFast CLI 0.0.13 currently pulls esbuild 0.28.0, which npm reports under low-severity advisory [GHSA-g7r4-m6w7-qqqr](https://github.com/advisories/GHSA-g7r4-m6w7-qqqr). The affected behavior is an esbuild development server running on Windows; Neighborhoods uses this dependency only for the SpaceFast publishing CLI on macOS or Linux and does not invoke that server. Review this exception before every release candidate and remove it when SpaceFast publishes a fixed dependency graph.
+SpaceFast CLI 0.0.24 currently pulls transitive `esbuild` and `js-yaml` advisories that npm reports in the development toolchain. Neighborhoods uses SpaceFast only as a local/CI publishing CLI; it is not bundled into the frontend and production dependencies report zero vulnerabilities with `npm audit --omit=dev`. Review these dev-tool exceptions before every release candidate and remove them when SpaceFast publishes a fixed dependency graph.
