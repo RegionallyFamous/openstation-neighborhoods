@@ -40,7 +40,7 @@ Record the following against the immutable preview URL:
 - Fresh OAuth connection and revoked/expired/invalid-token recovery
 - Disconnected mode with Beeper closed
 - Automatic discovery and joining with a disposable test account
-- Real message load, send, reaction, unread state, and member display
+- Real message load, send, unread state, and member display
 - Welcome and Announcements permissions with a non-administrator account
 - CSP and other response headers
 - Canonical-domain and `www` redirect behavior

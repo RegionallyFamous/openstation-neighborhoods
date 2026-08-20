@@ -28,7 +28,6 @@ export const openStationManifest: CommunityManifest = {
           roomId: '!UuSyQQEmGsqUSLAaAZ:beeper.com',
           topic: 'Start here, meet the neighbors, and learn how this place works.',
           kind: 'announcement',
-          discoveryTitles: ['OpenStation · Welcome', 'OpenStation Welcome'],
         },
         {
           id: 'announcements',
@@ -36,7 +35,6 @@ export const openStationManifest: CommunityManifest = {
           roomId: '!GsViuCUYarKZrSbEPw:beeper.com',
           topic: 'Releases, events, experiments, and things worth gathering around.',
           kind: 'announcement',
-          discoveryTitles: ['OpenStation · Announcements', 'OpenStation Announcements'],
         },
       ],
     },
@@ -50,7 +48,6 @@ export const openStationManifest: CommunityManifest = {
           roomId: '!pNVJVFkiQDmaHxpeeA:beeper.com',
           topic: 'The daily pulse of OpenStation.',
           kind: 'text',
-          discoveryTitles: ['OpenStation · General', 'OpenStation General'],
         },
         {
           id: 'showcase',
@@ -58,7 +55,6 @@ export const openStationManifest: CommunityManifest = {
           roomId: '!iXXipjdOmtOlNOBjFV:beeper.com',
           topic: 'Share the strange, useful, and delightful things you made.',
           kind: 'text',
-          discoveryTitles: ['OpenStation · Showcase', 'OpenStation Showcase'],
         },
       ],
     },
@@ -72,7 +68,6 @@ export const openStationManifest: CommunityManifest = {
           roomId: '!VjKgltGsprslucAaLp:beeper.com',
           topic: 'Themes, games, tools, half-working prototypes, and shop talk.',
           kind: 'text',
-          discoveryTitles: ['OpenStation · Builders', 'OpenStation Builders'],
         },
         {
           id: 'help-desk',
@@ -80,7 +75,6 @@ export const openStationManifest: CommunityManifest = {
           roomId: '!xyMzRCglbiZDoNyjUH:beeper.com',
           topic: 'Ask for help. Leave behind an answer the next person can find.',
           kind: 'text',
-          discoveryTitles: ['OpenStation · Help Desk', 'OpenStation Help Desk'],
         },
       ],
     },
@@ -104,37 +98,11 @@ export function flattenChannels(
   );
 }
 
-export function normalizeDiscoveryName(value: string): string {
-  return value
-    .normalize('NFKD')
-    .toLowerCase()
-    .replace(/[·•#:_\-.]+/g, ' ')
-    .replace(/[^a-z0-9\s]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 export function channelMatchesChat(
   channel: ChannelDefinition,
   chat: BeeperChat,
 ): boolean {
-  if (channel.roomId) {
-    return isCanonicalMatrixRoomID(channel.roomId) && channel.roomId === chat.id;
-  }
-
-  const chatTitle = normalizeDiscoveryName(chat.title);
-  const alias = channel.alias
-    ? normalizeDiscoveryName(channel.alias.split(':')[0] ?? channel.alias)
-    : '';
-  const names = [channel.name, alias, ...channel.discoveryTitles].map(
-    normalizeDiscoveryName,
-  );
-
-  return names.some((candidate) => {
-    if (!candidate) return false;
-    if (candidate === chatTitle) return true;
-    return candidate.includes('openstation') && chatTitle.includes(candidate);
-  });
+  return isCanonicalMatrixRoomID(channel.roomId) && channel.roomId === chat.id;
 }
 
 export function mapBeeperChatsToChannels(
@@ -160,12 +128,12 @@ export function mapBeeperChatsToChannels(
 }
 
 export function validateCanonicalRoomIDs(manifest: CommunityManifest): void {
-  if (manifest.spaceRoomId && !isCanonicalMatrixRoomID(manifest.spaceRoomId)) {
+  if (!isCanonicalMatrixRoomID(manifest.spaceRoomId)) {
     throw new Error('The OpenStation Space must use a canonical Matrix room ID.');
   }
   manifest.categories.forEach((category) => {
     category.channels.forEach((channel) => {
-      if (channel.roomId && !isCanonicalMatrixRoomID(channel.roomId)) {
+      if (!isCanonicalMatrixRoomID(channel.roomId)) {
         throw new Error(`#${channel.name} must use a canonical Matrix room ID.`);
       }
     });

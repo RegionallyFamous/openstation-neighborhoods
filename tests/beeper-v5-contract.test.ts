@@ -57,7 +57,6 @@ describe('Beeper Desktop 4.3.34 / Client API v5 contract fixtures', () => {
         senderID: '@neighbor-fixture:beeper.com',
         text: 'A synthetic message shaped like Beeper Client API v5.',
         attachments: [{ fileName: 'fixture.png', type: 'img' }],
-        reactions: [{ key: '✨' }],
       },
     ]);
   });

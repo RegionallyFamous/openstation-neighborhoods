@@ -4,7 +4,7 @@ OpenStation is a Beeper Neighborhood carried by the account already inside Beepe
 
 The interface is an independent product that works with Beeper Desktop. Beeper is a third-party service and trademark; OpenStation does not operate or expose the Beeper API. See [`docs/BRANDING.md`](docs/BRANDING.md) for attribution and asset provenance.
 
-The product lives at `openstation.chat`. It detects Beeper on `localhost`, connects through Beeper's OAuth flow, automatically joins the OpenStation rooms, reads their real messages, and sends messages and reactions through the Beeper Desktop API. No fictional chat or member data is shown when disconnected.
+The product lives at `openstation.chat`. It detects Beeper at the pinned `127.0.0.1` Desktop API, connects through Beeper's OAuth flow, joins the OpenStation rooms after explicit consent, and reads and sends real messages. No fictional chat or member data is shown when disconnected.
 
 ![OpenStation Neighborhoods web preview](docs/screenshots/neighborhoods-desktop.png)
 
@@ -14,16 +14,15 @@ The product lives at `openstation.chat`. It detects Beeper on `localhost`, conne
 - A disconnected onboarding shell that never pretends sample content is live
 - Automatic Beeper Desktop detection
 - OAuth 2.0 dynamic client registration with PKCE
-- A development-only manual access-token fallback
 - Automatic Matrix room joining and discovery based on the community manifest
-- Messages, reactions, unread badges, member lists, and send support
+- Messages, unread badges, member lists, and send support
 - Unit tests for room discovery, API normalization, and OAuth PKCE
 
 ## Run it
 
 Requirements:
 
-- Node.js 22.13 or newer
+- Node.js 22.20 or newer
 - Beeper Desktop 4.2.936 or newer for the live integration
 
 ```bash
@@ -58,11 +57,11 @@ npm run check
 1. Keep Beeper Desktop open.
 2. In Beeper, open **Settings → Integrations** and enable the Desktop API.
 3. Open the connection panel in Neighborhoods.
-4. Choose **Connect with Beeper** and approve the local read/write request Beeper shows.
+4. Accept the public-room notice, choose **Join OpenStation**, and approve the local read/write request Beeper shows.
 
 OAuth access tokens are stored in `sessionStorage`, introspected before a live session starts, and revoked through Beeper when a user explicitly disconnects. Closing the browser session clears the local token. A stale or revoked token returns the app to a reconnectable authorization state. Neighborhoods never asks Beeper to listen beyond the loopback interface.
 
-For development builds, **Use a manual token instead** accepts a token created in Beeper's integration settings. It is not part of the public member journey. Do not commit tokens to this repository or put them in Vite environment variables.
+Do not commit tokens to this repository or put them in Vite environment variables.
 
 ## The community manifest
 
@@ -86,13 +85,13 @@ Beeper Desktop API
 OpenStation Matrix Space and rooms
 ```
 
-The client uses serialized, visibility-aware HTTP synchronization for the selected room, with backoff when Beeper is unavailable. It retrieves complete room participants, streams Beeper-local avatars and attachments through the authenticated asset endpoint, resolves pending sends, toggles reactions, and loads older history with opaque cursors. Beeper also exposes an experimental WebSocket API, but normal browser WebSockets cannot attach its required `Authorization` header, so the hosted client uses the documented HTTP endpoints.
+The client uses serialized, visibility-aware HTTP synchronization for the selected room, with backoff when Beeper is unavailable. It retrieves complete room participants, streams Beeper-local avatars and attachments through the authenticated asset endpoint, resolves pending sends, and loads older history with opaque cursors. Beeper also exposes an experimental WebSocket API, but normal browser WebSockets cannot attach its required `Authorization` header, so the hosted client uses the documented HTTP endpoints.
 
 ## Deliberate limitations
 
 - Room provisioning is not included in the production member bundle; operators use the separate setup and governance runbooks.
 - Search, notification controls, threads, uploads, voice, and member moderation are outside the current release-candidate scope and are not presented as active controls.
-- Room joining is automatic after Beeper authorization; the OpenStation Space and rooms still need one-time administrator provisioning.
+- Room joining is automatic only after the current public-room notice is accepted and Beeper authorization completes; returning sessions never silently rejoin rooms someone left.
 - The hosted build still talks to Beeper on the visitor's own computer. It therefore requires Beeper Desktop to be running and the browser to grant local-network access; no OpenStation server receives the Beeper token.
 
 ## Project layout

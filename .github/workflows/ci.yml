@@ -21,10 +21,10 @@ jobs:
       fail-fast: false
       matrix:
         node:
-          - 22.13.0
+          - 22.20.0
           - 24.x
     env:
-      VITE_BEEPER_API_BASE: http://localhost:23373
+      VITE_BEEPER_API_BASE: http://127.0.0.1:23373
       VITE_BEEPER_OAUTH_SCOPE: ""
     steps:
       - name: Check out source
@@ -50,7 +50,7 @@ jobs:
           test -s dist/_headers
           test -s dist/_redirects
           grep -F "Content-Security-Policy:" dist/_headers
-          grep -F "http://localhost:23373" dist/_headers
+          grep -F "http://127.0.0.1:23373" dist/_headers
           grep -F "/* /index.html 200" dist/_redirects
 
       - name: Audit dependency graph

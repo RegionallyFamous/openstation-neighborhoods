@@ -134,14 +134,6 @@ export const beeperMessagesV5 = {
         },
       ],
       mentions: [],
-      reactions: [
-        {
-          id: '@openstation-fixture:beeper.com|sparkles',
-          reactionKey: '✨',
-          participantID: '@openstation-fixture:beeper.com',
-          emoji: true,
-        },
-      ],
       seen: {
         '@openstation-fixture:beeper.com': '2026-08-19T18:07:00.000Z',
       },

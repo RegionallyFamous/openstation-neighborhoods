@@ -35,7 +35,7 @@ The workflow smoke-tests the canonical domain, security headers, and `www` redir
 CI builds with a fixed production configuration:
 
 ```text
-VITE_BEEPER_API_BASE=http://localhost:23373
+VITE_BEEPER_API_BASE=http://127.0.0.1:23373
 VITE_BEEPER_OAUTH_SCOPE=
 ```
 
@@ -72,5 +72,4 @@ Do not create a public proxy to port 23373. The Beeper Desktop API remains bound
 
 ## Rollback
 
-SpaceFast keeps immutable ready versions. Use the process in [`ROLLBACK.md`](ROLLBACK.md) to point the live channel at the recorded last-known-good version. A rollback changes only the hosted frontend; it does not reverse messages, reactions, room joins, or Matrix administration already performed through Beeper.
-
+SpaceFast keeps immutable ready versions. Use the process in [`ROLLBACK.md`](ROLLBACK.md) to point the live channel at the recorded last-known-good version. A rollback changes only the hosted frontend; it does not reverse messages, room joins, or Matrix administration already performed through Beeper.

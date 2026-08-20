@@ -57,15 +57,16 @@ export function ChannelSidebar({
                     }${!channel.joined && mode === 'beeper' ? ' is-unjoined' : ''}`}
                     type="button"
                     key={channel.id}
+                    aria-current={channel.id === selectedChannelId ? 'page' : undefined}
                     onClick={() => onSelectChannel(channel.id)}
                     title={!channel.joined && mode === 'beeper' ? `${channel.name} is not connected in Beeper` : channel.topic}
                   >
                     <ChannelIcon size={18} strokeWidth={2.1} />
                     <span>{channel.name}</span>
                     {channel.mentionCount > 0 ? (
-                      <b className="channel-link__mention">{channel.mentionCount}</b>
+                      <b className="channel-link__mention" aria-label={`${channel.mentionCount} mentions`}>{channel.mentionCount}</b>
                     ) : channel.unreadCount > 0 ? (
-                      <b className="channel-link__unread">{channel.unreadCount}</b>
+                      <b className="channel-link__unread" aria-label={`${channel.unreadCount} unread messages`}>{channel.unreadCount}</b>
                     ) : !channel.joined && mode === 'beeper' ? (
                       <small className="channel-link__join">NOT JOINED</small>
                     ) : null}

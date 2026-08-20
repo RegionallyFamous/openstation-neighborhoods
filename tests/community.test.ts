@@ -3,7 +3,6 @@ import {
   channelMatchesChat,
   flattenChannels,
   mapBeeperChatsToChannels,
-  normalizeDiscoveryName,
 } from '../src/community';
 import type { BeeperChat } from '../src/beeper/types';
 
@@ -15,26 +14,6 @@ describe('community manifest matching', () => {
     expect(channels).toHaveLength(6);
     expect(roomIDs.every(Boolean)).toBe(true);
     expect(new Set(roomIDs)).toHaveLength(6);
-  });
-
-  it('normalizes friendly room titles and Matrix aliases', () => {
-    expect(normalizeDiscoveryName('OpenStation · Help-Desk')).toBe(
-      'openstation help desk',
-    );
-    expect(normalizeDiscoveryName('#showcase:openstation.chat')).toBe(
-      'showcase openstation chat',
-    );
-  });
-
-  it('matches by title only during discovery without a stable room ID', () => {
-    const general = flattenChannels().find((channel) => channel.id === 'general');
-    expect(general).toBeDefined();
-    expect(
-      channelMatchesChat(
-        { ...general!, roomId: undefined },
-        chat({ title: 'OpenStation · General' }),
-      ),
-    ).toBe(true);
   });
 
   it('maps only the Matrix account and preserves unread state', () => {
@@ -70,17 +49,6 @@ describe('community manifest matching', () => {
       channelMatchesChat(
         general!,
         chat({ id: general!.roomId, title: 'A renamed room' }),
-      ),
-    ).toBe(true);
-  });
-
-  it('allows title discovery only for definitions without a stable room ID', () => {
-    const general = flattenChannels().find((channel) => channel.id === 'general');
-    expect(general).toBeDefined();
-    expect(
-      channelMatchesChat(
-        { ...general!, roomId: undefined },
-        chat({ id: '!discovered:beeper.com', title: 'OpenStation · General' }),
       ),
     ).toBe(true);
   });

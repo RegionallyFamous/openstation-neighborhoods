@@ -94,13 +94,6 @@ export interface BeeperAttachment {
   srcURL?: string;
 }
 
-export interface BeeperReaction {
-  key: string;
-  count: number;
-  mine?: boolean;
-  participantIDs: string[];
-}
-
 export type BeeperSendStatusKind =
   | 'SUCCESS'
   | 'PENDING'
@@ -122,10 +115,10 @@ export interface BeeperMessage {
   timestamp: string;
   text: string;
   isEdited: boolean;
+  removed: boolean;
   linkedMessageID?: string;
   sendStatus?: BeeperSendStatus;
   attachments: BeeperAttachment[];
-  reactions: BeeperReaction[];
 }
 
 export interface BeeperCursorPage<T> {
@@ -144,9 +137,7 @@ export interface BeeperChatListOptions extends BeeperCursorOptions {
   accountIDs?: string[];
 }
 
-export interface BeeperMessageListOptions extends BeeperCursorOptions {
-  selfUserID?: string;
-}
+export type BeeperMessageListOptions = BeeperCursorOptions;
 
 export interface BeeperOAuthMetadata {
   authorization_endpoint: string;

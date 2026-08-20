@@ -1,6 +1,7 @@
 import {
   BeeperClient,
   BeeperApiError,
+  assertSupportedBeeperInfo,
   DEFAULT_BEEPER_API_BASE,
   normalizeBeeperBaseUrl,
 } from './client';
@@ -24,19 +25,19 @@ interface OAuthPendingState {
   redirectURI: string;
 }
 
-interface StoredClient {
-  clientID: string;
-  registrationEndpoint: string;
-  redirectURI: string;
-}
-
 // React StrictMode deliberately mounts effects twice in development. Keep the
 // callback exchange shared so the authorization code is consumed only once and
 // both effect instances observe the same result.
 let oauthCallbackCompletion: Promise<string | null> | null = null;
 
 export function getStoredAccessToken(): string | null {
-  return sessionStorage.getItem(ACCESS_TOKEN_KEY);
+  const token = sessionStorage.getItem(ACCESS_TOKEN_KEY);
+  const expiresAt = Number(sessionStorage.getItem(ACCESS_TOKEN_EXPIRES_KEY));
+  if (token && Number.isFinite(expiresAt) && expiresAt > 0 && expiresAt <= Date.now()) {
+    disconnectBeeper();
+    return null;
+  }
+  return token;
 }
 
 export function disconnectBeeper(): void {
@@ -58,6 +59,7 @@ export async function beginBeeperOAuth(
   assertTrustedApplicationOrigin();
   const client = new BeeperClient({ baseUrl });
   const info = await client.getInfo();
+  assertSupportedBeeperInfo(info);
   const metadata = await discoverOAuthMetadata(baseUrl);
   const redirectURI = `${window.location.origin}${window.location.pathname}`;
   const registrationEndpoint = validateLocalOAuthEndpoint(
@@ -70,7 +72,7 @@ export async function beginBeeperOAuth(
     throw new Error('Beeper did not advertise an OAuth registration endpoint.');
   }
 
-  const registeredClient = await registerClient(
+  const clientID = await registerClient(
     registrationEndpoint,
     redirectURI,
   );
@@ -80,7 +82,7 @@ export async function beginBeeperOAuth(
   const pending: OAuthPendingState = {
     state,
     verifier,
-    clientID: registeredClient.clientID,
+    clientID,
     tokenEndpoint: validateLocalOAuthEndpoint(
       metadata.token_endpoint,
       baseUrl,
@@ -98,7 +100,7 @@ export async function beginBeeperOAuth(
     ),
   );
   authorizationURL.searchParams.set('response_type', 'code');
-  authorizationURL.searchParams.set('client_id', registeredClient.clientID);
+  authorizationURL.searchParams.set('client_id', clientID);
   authorizationURL.searchParams.set('redirect_uri', redirectURI);
   authorizationURL.searchParams.set('code_challenge', challenge);
   authorizationURL.searchParams.set('code_challenge_method', 'S256');
@@ -302,8 +304,9 @@ function validateLocalOAuthEndpoint(
   } catch {
     throw new Error(`Beeper advertised an invalid OAuth ${label} endpoint.`);
   }
+  const trustedOrigin = normalizeBeeperBaseUrl(baseUrl);
   if (
-    normalizeBeeperBaseUrl(endpoint.origin) !== endpoint.origin ||
+    normalizeBeeperBaseUrl(endpoint.origin) !== trustedOrigin ||
     endpoint.username ||
     endpoint.password
   ) {
@@ -343,7 +346,7 @@ function assertTrustedApplicationOrigin(): void {
 async function registerClient(
   registrationEndpoint: string,
   redirectURI: string,
-): Promise<StoredClient> {
+): Promise<string> {
   // Desktop API restarts can invalidate registered client IDs independently of
   // the browser's storage. Registration is local and side-effect free, so a
   // fresh public client is safer than reusing an unverifiable cached ID.
@@ -367,12 +370,10 @@ async function registerClient(
     throw new Error(`Beeper rejected the local OAuth client (${response.status}).`);
   }
   const registration = (await response.json()) as BeeperOAuthClientRegistration;
-  const stored: StoredClient = {
-    clientID: registration.client_id,
-    registrationEndpoint,
-    redirectURI,
-  };
-  return stored;
+  if (!registration.client_id?.trim()) {
+    throw new Error('Beeper did not return a valid OAuth client ID.');
+  }
+  return registration.client_id;
 }
 
 function randomUrlSafeString(length: number): string {

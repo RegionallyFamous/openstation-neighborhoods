@@ -5,11 +5,10 @@ import {
   LoaderCircle,
   MessageCircle,
   Send,
-  Smile,
   Users,
 } from 'lucide-react';
 import { FormEvent, Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import type { CommunityChannel, CommunityMessage } from '../types';
+import type { CommunityChannel, CommunityMessage, MessageAttachment } from '../types';
 import { OpenStationMark } from './OpenStationMark';
 
 interface MessageTimelineProps {
@@ -20,10 +19,16 @@ interface MessageTimelineProps {
   canLoadOlder: boolean;
   isLoadingOlder: boolean;
   onSend: (body: string) => Promise<void>;
-  onReact: (messageId: string, key: string) => Promise<void>;
   onLoadOlder: () => Promise<void>;
+  onResolveAttachment: (attachment: MessageAttachment) => Promise<string>;
+  onReadEligibilityChange: (eligible: boolean) => void;
+  onToggleChannels: () => void;
   onToggleMembers: () => void;
   onOpenConnect: () => void;
+  channelsOpen: boolean;
+  membersOpen: boolean;
+  blockedByDrawer: boolean;
+  readingBlocked: boolean;
 }
 
 export function MessageTimeline({
@@ -34,14 +39,19 @@ export function MessageTimeline({
   canLoadOlder,
   isLoadingOlder,
   onSend,
-  onReact,
   onLoadOlder,
+  onResolveAttachment,
+  onReadEligibilityChange,
+  onToggleChannels,
   onToggleMembers,
   onOpenConnect,
+  channelsOpen,
+  membersOpen,
+  blockedByDrawer,
+  readingBlocked,
 }: MessageTimelineProps) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [actionError, setActionError] = useState('');
-  const [reactionPendingMessageId, setReactionPendingMessageId] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const nearBottomRef = useRef(true);
@@ -60,6 +70,11 @@ export function MessageTimeline({
     previousChannel.current = channel.id;
   }, [channel.id, messages.at(-1)?.id]);
 
+  useEffect(() => {
+    onReadEligibilityChange(!readingBlocked && nearBottomRef.current);
+    return () => onReadEligibilityChange(false);
+  }, [channel.id, onReadEligibilityChange, readingBlocked]);
+
   const grouped = useMemo(() => groupMessages(messages), [messages]);
 
   async function submit(event: FormEvent) {
@@ -77,39 +92,53 @@ export function MessageTimeline({
     }
   }
 
-  async function react(messageId: string, key: string) {
-    if (reactionPendingMessageId) return;
-    setActionError('');
-    setReactionPendingMessageId(messageId);
-    try {
-      await onReact(messageId, key);
-    } catch (error) {
-      setActionError(error instanceof Error ? error.message : 'The reaction could not be updated.');
-    } finally {
-      setReactionPendingMessageId(null);
-    }
-  }
-
   return (
-    <main className="conversation">
+    <main
+      className="conversation"
+      inert={blockedByDrawer}
+      aria-hidden={blockedByDrawer || undefined}
+    >
       <header className="conversation-header">
+        <button
+          className="conversation-header__rooms"
+          type="button"
+          aria-label={channelsOpen ? 'Hide rooms' : 'Show rooms'}
+          aria-controls="channel-drawer"
+          aria-expanded={channelsOpen}
+          onClick={onToggleChannels}
+        >
+          <Hash size={17} aria-hidden="true" />
+          <span>ROOMS</span>
+        </button>
         <span className="conversation-header__hash"><Hash size={21} /></span>
         <div className="conversation-header__title">
           <strong>{channel.name}</strong>
           <span>{channel.topic}</span>
         </div>
         <div className="conversation-header__tools">
-          <button type="button" aria-label="Show members" onClick={onToggleMembers}><Users size={20} /></button>
+          <button
+            type="button"
+            aria-label={membersOpen ? 'Hide members' : 'Show members'}
+            aria-controls="member-drawer"
+            aria-expanded={membersOpen}
+            onClick={onToggleMembers}
+          >
+            <Users size={20} />
+          </button>
         </div>
       </header>
 
       <div
         className="message-scroll"
+        role="region"
+        aria-label={`#${channel.name} conversation`}
+        tabIndex={0}
         ref={scrollRef}
         onScroll={(event) => {
           const element = event.currentTarget;
           nearBottomRef.current =
             element.scrollHeight - element.scrollTop - element.clientHeight < 120;
+          onReadEligibilityChange(!readingBlocked && nearBottomRef.current);
         }}
       >
         <section className="channel-welcome">
@@ -189,8 +218,8 @@ export function MessageTimeline({
                   {showDate && <div className="date-divider"><span>{formatDate(group[0].sentAt)}</span></div>}
                   <MessageGroup
                     messages={group}
-                    onReact={react}
-                    reactionPendingMessageId={reactionPendingMessageId}
+                    onResolveAttachment={onResolveAttachment}
+                    onError={setActionError}
                   />
                 </Fragment>
               );
@@ -235,14 +264,15 @@ export function MessageTimeline({
 
 function MessageGroup({
   messages,
-  onReact,
-  reactionPendingMessageId,
+  onResolveAttachment,
+  onError,
 }: {
   messages: CommunityMessage[];
-  onReact: (messageId: string, key: string) => Promise<void>;
-  reactionPendingMessageId: string | null;
+  onResolveAttachment: (attachment: MessageAttachment) => Promise<string>;
+  onError: (message: string) => void;
 }) {
   const first = messages[0];
+  const [downloadingAttachmentId, setDownloadingAttachmentId] = useState<string | null>(null);
   return (
     <article className="message-group">
       <span className="message-avatar" style={{ '--avatar-color': first.author.color } as React.CSSProperties}>
@@ -266,36 +296,43 @@ function MessageGroup({
                 {message.deliveryMessage || message.delivery}
               </small>
             )}
-            {message.attachments.map((attachment) => attachment.url ? (
-              <a className="message-attachment" href={attachment.url} key={attachment.id} download={attachment.name}>
+            {message.attachments.map((attachment) => (
+              <button
+                className="message-attachment"
+                type="button"
+                key={attachment.id}
+                disabled={downloadingAttachmentId === attachment.id}
+                aria-busy={downloadingAttachmentId === attachment.id}
+                onClick={() => {
+                  setDownloadingAttachmentId(attachment.id);
+                  onError('');
+                  void onResolveAttachment(attachment)
+                    .then((url) => {
+                      const download = document.createElement('a');
+                      download.href = url;
+                      download.download = attachment.name;
+                      download.rel = 'noopener';
+                      download.click();
+                    })
+                    .catch((error) => {
+                      onError(error instanceof Error ? error.message : 'The attachment could not be opened.');
+                    })
+                    .finally(() => setDownloadingAttachmentId(null));
+                }}
+              >
                 <FileText size={19} />
-                <span><strong>{attachment.name}</strong><small>{attachment.size ? `${Math.ceil(attachment.size / 1024)} KB` : 'Attachment'}</small></span>
-              </a>
-            ) : (
-              <span className="message-attachment" key={attachment.id} aria-label={`${attachment.name} attachment is unavailable`}>
-                <FileText size={19} />
-                <span><strong>{attachment.name}</strong><small>Attachment unavailable</small></span>
-              </span>
-            ))}
-            <div className="message-reactions">
-              {message.reactions.map((reaction, reactionIndex) => (
-                <button
-                  className={reaction.mine ? 'is-mine' : ''}
-                  type="button"
-                  key={`${reaction.key}-${reactionIndex}`}
-                  disabled={reactionPendingMessageId === message.id || message.pending || message.delivery === 'failed'}
-                  aria-busy={reactionPendingMessageId === message.id}
-                  aria-pressed={Boolean(reaction.mine)}
-                  aria-label={`${reaction.mine ? 'Remove' : 'Add'} ${reaction.key} reaction`}
-                  onClick={() => void onReact(message.id, reaction.key)}
-                >
-                  <span>{reaction.key}</span>{reaction.count}
-                </button>
-              ))}
-              <button type="button" disabled={reactionPendingMessageId === message.id || message.pending || message.delivery === 'failed'} aria-busy={reactionPendingMessageId === message.id} onClick={() => void onReact(message.id, '✨')} aria-label="Add sparkle reaction">
-                <Smile size={14} />+
+                <span>
+                  <strong>{attachment.name}</strong>
+                  <small>
+                    {downloadingAttachmentId === attachment.id
+                      ? 'Opening from Beeper…'
+                      : attachment.size
+                        ? `${Math.ceil(attachment.size / 1024)} KB · Download`
+                        : 'Download from Beeper'}
+                  </small>
+                </span>
               </button>
-            </div>
+            ))}
           </div>
         ))}
       </div>

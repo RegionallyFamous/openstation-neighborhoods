@@ -7,14 +7,13 @@ import type {
   BeeperInfo,
   BeeperMessage,
   BeeperMessageListOptions,
-  BeeperReaction,
   BeeperSendStatus,
   BeeperUser,
 } from './types';
 
 export const DEFAULT_BEEPER_API_BASE =
   import.meta.env.VITE_BEEPER_API_BASE?.replace(/\/$/, '') ||
-  'http://localhost:23373';
+  'http://127.0.0.1:23373';
 
 const MAX_ASSET_BYTES = 12 * 1024 * 1024;
 const UNSAFE_ASSET_TYPES = new Set([
@@ -42,7 +41,6 @@ export class BeeperApiError extends Error {
 export class BeeperClient {
   readonly baseUrl: string;
   private readonly token?: string;
-  private selfUserID?: string;
   private readonly assetURLCache = new Map<string, Promise<string | undefined>>();
   private readonly blobURLs = new Set<string>();
 
@@ -60,7 +58,6 @@ export class BeeperClient {
     const accounts = extractItems(raw)
       .map(normalizeAccount)
       .filter((account): account is BeeperAccount => account !== null);
-    this.selfUserID = accounts.find((account) => account.accountID === 'matrix')?.user?.id;
     return accounts;
   }
 
@@ -126,9 +123,7 @@ export class BeeperClient {
     const raw = await this.request<unknown>(
       withQuery(`/v1/chats/${encodeURIComponent(chatID)}/messages`, params),
     );
-    const page = normalizeCursorPage(raw, (item) =>
-      normalizeMessage(item, options.selfUserID ?? this.selfUserID),
-    );
+    const page = normalizeCursorPage(raw, normalizeMessage);
     page.items.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
     return page;
   }
@@ -138,10 +133,7 @@ export class BeeperClient {
       `/v1/chats/${encodeURIComponent(chatID)}/messages/${encodeURIComponent(messageID)}`,
     );
     const record = asRecord(raw);
-    const message = normalizeMessage(
-      record.message ?? record,
-      this.selfUserID,
-    );
+    const message = normalizeMessage(record.message ?? record);
     if (!message) {
       throw new BeeperApiError('Beeper returned an incomplete message.', 502);
     }
@@ -188,34 +180,6 @@ export class BeeperClient {
     });
   }
 
-  async addReaction(
-    chatID: string,
-    messageID: string,
-    reactionKey: string,
-  ): Promise<void> {
-    await this.request(
-      `/v1/chats/${encodeURIComponent(chatID)}/messages/${encodeURIComponent(messageID)}/reactions`,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          reactionKey,
-          transactionID: crypto.randomUUID(),
-        }),
-      },
-    );
-  }
-
-  async deleteReaction(
-    chatID: string,
-    messageID: string,
-    reactionKey: string,
-  ): Promise<void> {
-    await this.request(
-      `/v1/chats/${encodeURIComponent(chatID)}/messages/${encodeURIComponent(messageID)}/reactions/${encodeURIComponent(reactionKey)}`,
-      { method: 'DELETE' },
-    );
-  }
-
   resolveAssetURL(value: string | undefined): Promise<string | undefined> {
     const assetURL = value?.trim();
     if (!assetURL) return Promise.resolve(undefined);
@@ -257,7 +221,7 @@ export class BeeperClient {
     if (!resourceURL) return undefined;
     const parsed = new URL(resourceURL);
     if (parsed.protocol === 'http:') {
-      normalizeBeeperBaseUrl(parsed.origin);
+      if (normalizeBeeperBaseUrl(parsed.origin) !== this.baseUrl) return undefined;
       const response = await this.request<Response>(`${parsed.pathname}${parsed.search}`, {
         responseType: 'raw',
       });
@@ -368,23 +332,19 @@ export function normalizeChat(value: unknown): BeeperChat | null {
   };
 }
 
-export function normalizeMessage(
-  value: unknown,
-  selfUserID?: string,
-): BeeperMessage | null {
+export function normalizeMessage(value: unknown): BeeperMessage | null {
   const raw = asRecord(value);
   const id = readString(raw.id, raw.messageID);
   const chatID = readString(raw.chatID);
   const senderRecord = asRecord(raw.sender);
   const senderID = readString(raw.senderID, senderRecord.id);
   const timestamp = readString(raw.timestamp);
+  const removed = Boolean(raw.isHidden) || Boolean(raw.isDeleted);
   if (
     !id ||
     !chatID ||
     !senderID ||
     !timestamp ||
-    Boolean(raw.isHidden) ||
-    Boolean(raw.isDeleted) ||
     readString(raw.type).toUpperCase() === 'REACTION'
   ) {
     return null;
@@ -393,7 +353,6 @@ export function normalizeMessage(
   const attachments = Array.isArray(raw.attachments)
     ? raw.attachments.map(normalizeAttachment)
     : [];
-  const reactions = normalizeReactions(raw.reactions, selfUserID);
   const senderName = readString(raw.senderName, senderRecord.fullName, senderRecord.name);
   const sender = normalizeUser({
     ...senderRecord,
@@ -410,10 +369,10 @@ export function normalizeMessage(
     timestamp,
     text: readString(raw.text, asRecord(raw.content).body) || '',
     isEdited: Boolean(raw.editedTimestamp ?? raw.isEdited ?? raw.edited),
+    removed,
     linkedMessageID: readString(raw.linkedMessageID) || undefined,
     sendStatus: normalizeSendStatus(raw.sendStatus),
     attachments,
-    reactions,
   };
 }
 
@@ -499,38 +458,6 @@ function normalizeSendStatus(value: unknown): BeeperSendStatus | undefined {
   };
 }
 
-function normalizeReactions(value: unknown, selfUserID?: string): BeeperReaction[] {
-  if (!Array.isArray(value)) return [];
-
-  const grouped = new Map<string, BeeperReaction>();
-  value.forEach((item) => {
-    const raw = asRecord(item);
-    const key = readString(raw.reactionKey, raw.key);
-    if (!key) return;
-
-    const participantID = readString(raw.participantID);
-    const existing = grouped.get(key) ?? {
-      key,
-      count: 0,
-      participantIDs: [],
-    };
-    if (participantID && !existing.participantIDs.includes(participantID)) {
-      existing.participantIDs.push(participantID);
-    }
-    const legacyCount = readNumber(raw.count);
-    existing.count += legacyCount > 0 ? legacyCount : 1;
-    if (
-      Boolean(raw.mine ?? raw.isSelf) ||
-      Boolean(selfUserID && participantID === selfUserID)
-    ) {
-      existing.mine = true;
-    }
-    grouped.set(key, existing);
-  });
-
-  return [...grouped.values()];
-}
-
 function extractItems(value: unknown): unknown[] {
   if (Array.isArray(value)) return value;
   const record = asRecord(value);
@@ -578,10 +505,9 @@ export function normalizeBeeperBaseUrl(value: string): string {
     throw new BeeperApiError('The Beeper Desktop API address is invalid.', 0);
   }
 
-  const loopbackHosts = new Set(['localhost', '127.0.0.1', '[::1]']);
   if (
     url.protocol !== 'http:' ||
-    !loopbackHosts.has(url.hostname.toLowerCase()) ||
+    url.hostname !== '127.0.0.1' ||
     url.port !== '23373' ||
     url.username ||
     url.password ||
@@ -590,11 +516,47 @@ export function normalizeBeeperBaseUrl(value: string): string {
     url.hash
   ) {
     throw new BeeperApiError(
-      'The Beeper Desktop API must use a loopback HTTP address without credentials or a path.',
+      'The Beeper Desktop API must use http://127.0.0.1:23373 without credentials or a path.',
       0,
     );
   }
   return url.origin;
+}
+
+export function assertSupportedBeeperInfo(info: BeeperInfo): void {
+  if (
+    info.app?.bundle_id !== 'com.automattic.beeper.desktop' ||
+    info.server?.remote_access !== false ||
+    info.server?.status?.toLowerCase() !== 'running' ||
+    normalizeBeeperBaseUrl(info.server?.base_url) !== DEFAULT_BEEPER_API_BASE
+  ) {
+    throw new BeeperApiError(
+      'This local service is not a supported Beeper Desktop connection.',
+      0,
+    );
+  }
+  if (compareVersions(info.app.version, '4.2.936') < 0) {
+    throw new BeeperApiError('OpenStation requires Beeper Desktop 4.2.936 or newer.', 0);
+  }
+}
+
+function compareVersions(left: string, right: string): number {
+  const parse = (value: string) => value.split('.').slice(0, 3).map((part) => Number(part));
+  const leftParts = parse(left);
+  const rightParts = parse(right);
+  if (
+    leftParts.length !== 3 ||
+    rightParts.length !== 3 ||
+    [...leftParts, ...rightParts].some((part) => !Number.isInteger(part) || part < 0)
+  ) {
+    return -1;
+  }
+  for (let index = 0; index < 3; index += 1) {
+    if (leftParts[index] !== rightParts[index]) {
+      return leftParts[index] > rightParts[index] ? 1 : -1;
+    }
+  }
+  return 0;
 }
 
 export function normalizeResourceURL(value: string): string | undefined {

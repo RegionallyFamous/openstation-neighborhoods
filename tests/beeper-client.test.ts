@@ -33,7 +33,7 @@ describe('Beeper response normalization', () => {
     });
   });
 
-  it('retains compatibility with the legacy grouped-reaction message shape', () => {
+  it('retains compatibility with the legacy nested-sender message shape', () => {
     expect(
       normalizeMessage({
         id: '$event',
@@ -42,14 +42,12 @@ describe('Beeper response normalization', () => {
         sender: { id: '@june:beeper.com', fullName: 'June' },
         timestamp: '2026-08-19T12:00:00Z',
         text: 'Hello from Beeper',
-        reactions: [{ reactionKey: '✨', count: 2, isSelf: true }],
         attachments: [{ id: 'mxc://beeper/image', type: 'img', fileName: 'demo.png' }],
       }),
     ).toMatchObject({
       id: '$event',
       text: 'Hello from Beeper',
       sender: { fullName: 'June' },
-      reactions: [{ key: '✨', count: 2, mine: true }],
       attachments: [{ type: 'img', fileName: 'demo.png' }],
     });
   });
@@ -68,7 +66,7 @@ describe('Beeper response normalization', () => {
       '!welcome:openstation.chat',
     );
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:23373/_matrix/client/v3/join/%23welcome%3Aopenstation.chat',
+      'http://127.0.0.1:23373/_matrix/client/v3/join/%23welcome%3Aopenstation.chat',
       expect.objectContaining({
         method: 'POST',
         body: '{}',

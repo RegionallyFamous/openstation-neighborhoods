@@ -16,7 +16,7 @@ jobs:
     environment: preview
     env:
       SPACEFAST_TOKEN: ${{ secrets.SPACEFAST_TOKEN }}
-      VITE_BEEPER_API_BASE: http://localhost:23373
+      VITE_BEEPER_API_BASE: http://127.0.0.1:23373
       VITE_BEEPER_OAUTH_SCOPE: ""
     steps:
       - name: Check out selected revision

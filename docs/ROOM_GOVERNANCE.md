@@ -90,12 +90,12 @@ For every administrator, record in a private credential system:
 
 ## Initial hardening checklist
 
-- [ ] Confirm the creator and `m.room.create` event in all eight rooms.
+- [ ] Confirm the creator and `m.room.create` event in the Space and all six rooms.
 - [ ] Confirm the exact room version; current production rooms report version 11.
 - [ ] Decide with Beeper whether to upgrade to room version 12 before accepting content.
 - [ ] Verify two independent administrators in the Space and every room.
 - [ ] Verify two moderators and the moderation service in every public room.
-- [ ] Apply and export the approved power-level state for all eight rooms.
+- [ ] Apply and export the approved power-level state for the Space and all six rooms.
 - [ ] Verify public join, shared history, forbidden guests, and absent encryption.
 - [ ] Make the Space timeline moderator-only.
 - [ ] Add canonical parent events in all child rooms.
@@ -114,7 +114,7 @@ change, or Beeper platform update.
    encryption, canonical-alias, tombstone, and Space relationship state.
 2. Compare it with the last signed governance snapshot.
 3. Confirm the approved administrators, moderators, and bot are still joined
-   with the expected authority in all eight rooms.
+   with the expected authority in the Space and all six rooms.
 4. Confirm there are no unexpected creators, aliases, parent/child links, ACLs,
    or privileged accounts.
 5. Join with a normal account and verify posting permissions in announcements
@@ -173,7 +173,7 @@ version-12 upgrade and document how their credentials remain available.
 At least weekly during active use, create an encrypted archive containing:
 
 - the logical manifest and current room IDs;
-- room state and power levels for all eight rooms;
+- room state and power levels for the Space and all six rooms;
 - member and moderator roster needed for recovery;
 - messages and attachments permitted by policy; and
 - export time, counts, tool version, and verification result.
@@ -219,7 +219,7 @@ criteria are satisfied.
 ## Recovery acceptance drill
 
 - [ ] A backup administrator recovers control without the primary account.
-- [ ] A compromised moderator is removed from all eight rooms.
+- [ ] A compromised moderator is removed from the Space and all six rooms.
 - [ ] A room-state snapshot identifies and repairs a deliberate test change.
 - [ ] A fresh Beeper account joins the Space and all current room IDs.
 - [ ] A remote Matrix account can join, read shared history, and be moderated.

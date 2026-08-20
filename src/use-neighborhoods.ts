@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flattenChannels, mapBeeperChatsToChannels, openStationManifest } from './community';
-import { BeeperApiError, BeeperClient } from './beeper/client';
+import { assertSupportedBeeperInfo, BeeperApiError, BeeperClient } from './beeper/client';
 import {
   beginBeeperOAuth,
   completeBeeperOAuthCallback,
@@ -12,6 +12,7 @@ import {
 } from './beeper/oauth';
 import type {
   BeeperAccount,
+  BeeperChat,
   BeeperCursorPage,
   BeeperMessage,
   BeeperUser,
@@ -22,7 +23,6 @@ import type {
   ConnectionState,
   Member,
   MessageAttachment,
-  Reaction,
 } from './types';
 
 type Mode = 'disconnected' | 'beeper';
@@ -43,6 +43,8 @@ interface MessagePageState {
 const ACTIVE_POLL_INTERVAL_MS = 5_000;
 const HIDDEN_POLL_INTERVAL_MS = 30_000;
 const MAX_POLL_BACKOFF_MS = 60_000;
+const JOIN_CONSENT_KEY = 'openstation-neighborhoods:join-consent';
+const JOIN_CONSENT_VERSION = '2026-08-20-v1';
 
 export interface NeighborhoodsController {
   manifest: typeof openStationManifest;
@@ -57,12 +59,12 @@ export interface NeighborhoodsController {
   isLoadingOlder: boolean;
   selectChannel: (channelId: string) => void;
   sendMessage: (body: string) => Promise<void>;
-  addReaction: (messageId: string, key: string) => Promise<void>;
   loadOlderMessages: () => Promise<void>;
+  resolveAttachment: (attachment: MessageAttachment) => Promise<string>;
+  setReadEligible: (eligible: boolean) => void;
   probeBeeper: () => Promise<void>;
-  connectWithOAuth: () => Promise<void>;
+  connectWithOAuth: (joinConsentAccepted: boolean) => Promise<void>;
   disconnect: () => void;
-  resetConnection: () => void;
 }
 
 export function useNeighborhoods(): NeighborhoodsController {
@@ -82,8 +84,8 @@ export function useNeighborhoods(): NeighborhoodsController {
   const clientRef = useRef<BeeperClient | null>(null);
   const selfMemberRef = useRef<Member | null>(null);
   const memberStoreRef = useRef<Record<string, Member[]>>({});
+  const messagePageStoreRef = useRef<Record<string, MessagePageState>>({});
   const oauthEndpointsRef = useRef<{
-    introspection?: string;
     revocation?: string;
   }>({});
   const pollRef = useRef<number | null>(null);
@@ -94,6 +96,7 @@ export function useNeighborhoods(): NeighborhoodsController {
   );
   const readReceiptRequestsRef = useRef(new Set<string>());
   const lastReadMessageRef = useRef<Record<string, string>>({});
+  const readEligibleRef = useRef(false);
 
   const selectedChannel =
     channels.find((channel) => channel.id === selectedChannelId) ?? channels[0];
@@ -124,6 +127,7 @@ export function useNeighborhoods(): NeighborhoodsController {
     clientRef.current = null;
     selfMemberRef.current = null;
     memberStoreRef.current = {};
+    messagePageStoreRef.current = {};
     oauthEndpointsRef.current = {};
     setMode('disconnected');
     setChannels(flattenChannels());
@@ -229,10 +233,12 @@ export function useNeighborhoods(): NeighborhoodsController {
       if (options.signal?.aborted || generation !== syncGenerationRef.current) return;
 
       try {
-        const requestKey = `${generation}:${channel.beeperChatId}`;
+        const existingPageState = messagePageStoreRef.current[channel.id];
+        const newestCursor = existingPageState?.newestCursor;
+        const requestKey = `${generation}:${channel.beeperChatId}:${newestCursor ?? 'latest'}`;
         let request = messageRequestsRef.current.get(requestKey);
         if (!request) {
-          request = client.getMessagesPage(channel.beeperChatId);
+          request = fetchNewMessagePages(client, channel.beeperChatId, newestCursor);
           messageRequestsRef.current.set(requestKey, request);
           void request
             .finally(() => {
@@ -246,38 +252,47 @@ export function useNeighborhoods(): NeighborhoodsController {
         const page = await request;
         if (options.signal?.aborted || generation !== syncGenerationRef.current) return;
         const knownMembers = memberStoreRef.current[channel.id] ?? [];
+        const removedMessageIDs = new Set(
+          page.items.filter((message) => message.removed).map((message) => message.id),
+        );
         const hydrated = await Promise.all(
-          page.items.map((message) =>
+          page.items.filter((message) => !message.removed).map((message) =>
             toCommunityMessage(message, channel.id, client, knownMembers),
           ),
         );
         if (options.signal?.aborted || generation !== syncGenerationRef.current) return;
         setMessageStore((current) => ({
           ...current,
-          [channel.id]: mergeCommunityMessages(current[channel.id] ?? [], hydrated),
+          [channel.id]: reconcileCommunityMessages(
+            current[channel.id] ?? [],
+            hydrated,
+            removedMessageIDs,
+          ),
         }));
-        setMessagePages((current) => {
-          const existing = current[channel.id];
-          return {
-            ...current,
-            [channel.id]: {
-              hasMore: existing?.historyExhausted ? false : page.hasMore,
-              oldestCursor: existing?.oldestCursor ?? page.oldestCursor,
-              newestCursor: page.newestCursor,
-              historyExhausted: existing?.historyExhausted ?? !page.hasMore,
-            },
-          };
-        });
+        const nextPageState: MessagePageState = {
+          hasMore: existingPageState?.historyExhausted
+            ? false
+            : existingPageState?.hasMore ?? page.hasMore,
+          oldestCursor: existingPageState?.oldestCursor ?? page.oldestCursor,
+          newestCursor: page.newestCursor ?? existingPageState?.newestCursor ?? null,
+          historyExhausted: existingPageState?.historyExhausted ?? !page.hasMore,
+        };
+        messagePageStoreRef.current[channel.id] = nextPageState;
+        setMessagePages((current) => ({
+          ...current,
+          [channel.id]: nextPageState,
+        }));
 
         if (
           !options.markRead ||
           selectedChannelIdRef.current !== channel.id ||
           !pageIsVisible() ||
-          !pageHasFocus()
+          !pageHasFocus() ||
+          !readEligibleRef.current
         ) {
           return;
         }
-        const newest = page.items.at(-1);
+        const newest = [...page.items].reverse().find((message) => !message.removed);
         if (!newest || lastReadMessageRef.current[channel.id] === newest.id) return;
 
         const receiptKey = `${generation}:${channel.id}:${newest.id}`;
@@ -315,18 +330,15 @@ export function useNeighborhoods(): NeighborhoodsController {
   );
 
   const loadBeeper = useCallback(
-    async (token: string) => {
+    async (token: string, allowAutomaticJoin = false) => {
       stopPolling();
       setIsBusy(true);
       setConnection({ kind: 'authorizing', message: 'Opening the local Beeper door…' });
       const client = new BeeperClient({ token });
       try {
         const info = await client.getInfo();
-        if (info.app.bundle_id !== 'com.automattic.beeper.desktop' || info.server.remote_access) {
-          throw new Error('This local service is not a supported Beeper Desktop connection.');
-        }
+        assertSupportedBeeperInfo(info);
         oauthEndpointsRef.current = {
-          introspection: info.endpoints.oauth?.introspection_endpoint,
           revocation: info.endpoints.oauth?.revocation_endpoint,
         };
         const tokenActive = await introspectBeeperAccessToken(
@@ -338,11 +350,19 @@ export function useNeighborhoods(): NeighborhoodsController {
         }
         const [accounts, initialChats] = await Promise.all([
           client.getAccounts(),
-          client.getChats(),
+          getOpenStationChats(client),
         ]);
         const matrixAccount = findMatrixAccount(accounts);
         if (!matrixAccount) {
           throw new Error('Beeper is running, but its Matrix account was not available.');
+        }
+        if (
+          matrixAccount.status &&
+          !['connected', 'backfilling'].includes(matrixAccount.status)
+        ) {
+          throw new Error(
+            matrixAccount.statusText || 'Your Beeper account needs attention before OpenStation can connect.',
+          );
         }
         const profile: { avatarURL?: string; displayName?: string } = matrixAccount.user?.id
           ? await client.getUserProfile(matrixAccount.user.id).catch(() => ({}))
@@ -363,22 +383,23 @@ export function useNeighborhoods(): NeighborhoodsController {
           initialChats,
         );
         const roomsToJoin = initiallyMapped.filter(
-          (channel) => !channel.joined && Boolean(channel.roomId || channel.alias),
+          (channel) => !channel.joined,
         );
-        const [[spaceJoinResult], joinResults] = await Promise.all([
-          Promise.allSettled([
-            openStationManifest.spaceRoomId
-              ? client.joinRoom(openStationManifest.spaceRoomId)
-              : Promise.resolve(undefined),
-          ]),
-          Promise.allSettled(
-            roomsToJoin.map(async (channel) => ({
-              channelID: channel.id,
-              roomID: await client.joinRoom((channel.roomId || channel.alias) as string),
-            })),
-          ),
-        ]);
-        const authorizationFailure = [spaceJoinResult, ...joinResults].find(
+        const [spaceJoinResults, joinResults] = allowAutomaticJoin
+          ? await Promise.all([
+              Promise.allSettled([client.joinRoom(openStationManifest.spaceRoomId)]),
+              Promise.allSettled(
+                roomsToJoin.map(async (channel) => ({
+                  channelID: channel.id,
+                  roomID: await client.joinRoom(channel.roomId),
+                })),
+              ),
+            ])
+          : [[], []] as [
+              PromiseSettledResult<string>[],
+              PromiseSettledResult<{ channelID: string; roomID: string }>[],
+            ];
+        const authorizationFailure = [...spaceJoinResults, ...joinResults].find(
           (result): result is PromiseRejectedResult =>
             result.status === 'rejected' && isAuthorizationFailure(result.reason),
         );
@@ -393,7 +414,7 @@ export function useNeighborhoods(): NeighborhoodsController {
         let chats = initialChats;
         if (automaticallyJoined.size) {
           try {
-            chats = await client.getChats();
+            chats = await getOpenStationChats(client);
           } catch (error) {
             if (isAuthorizationFailure(error)) throw error;
           }
@@ -439,10 +460,6 @@ export function useNeighborhoods(): NeighborhoodsController {
           accountHandle: self.handle,
           avatarUrl: matrixAvatarURL,
         });
-        if (first.beeperChatId) {
-          await hydrateRoomDetails(first, client);
-          await hydrateMessages(first, client);
-        }
         return true;
       } catch (error) {
         client.dispose();
@@ -457,14 +474,23 @@ export function useNeighborhoods(): NeighborhoodsController {
         setIsBusy(false);
       }
     },
-    [clearConnectedState, hydrateMessages, hydrateRoomDetails, recoverAuthorization, stopPolling],
+    [clearConnectedState, recoverAuthorization, stopPolling],
   );
 
   useEffect(() => {
     let active = true;
+    const callbackURL = new URL(window.location.href);
+    const completesFreshAuthorization = callbackURL.searchParams.has('code');
+    const joinConsentIsCurrent =
+      window.localStorage.getItem(JOIN_CONSENT_KEY) === JOIN_CONSENT_VERSION;
     completeBeeperOAuthCallback()
       .then((token) => {
-        if (active && token) return loadBeeper(token);
+        if (active && token) {
+          return loadBeeper(
+            token,
+            completesFreshAuthorization && joinConsentIsCurrent,
+          );
+        }
         return undefined;
       })
       .catch((error) => {
@@ -591,23 +617,32 @@ export function useNeighborhoods(): NeighborhoodsController {
       if (generation !== syncGenerationRef.current || clientRef.current !== client) return;
       const knownMembers = memberStoreRef.current[channel.id] ?? [];
       const older = await Promise.all(
-        page.items.map((message) =>
+        page.items.filter((message) => !message.removed).map((message) =>
           toCommunityMessage(message, channel.id, client, knownMembers),
         ),
+      );
+      const removedMessageIDs = new Set(
+        page.items.filter((message) => message.removed).map((message) => message.id),
       );
       if (generation !== syncGenerationRef.current || clientRef.current !== client) return;
       setMessageStore((current) => ({
         ...current,
-        [channel.id]: mergeCommunityMessages(current[channel.id] ?? [], older),
+        [channel.id]: reconcileCommunityMessages(
+          current[channel.id] ?? [],
+          older,
+          removedMessageIDs,
+        ),
       }));
+      const nextPageState: MessagePageState = {
+        hasMore: page.hasMore,
+        oldestCursor: page.oldestCursor,
+        newestCursor: messagePageStoreRef.current[channel.id]?.newestCursor ?? page.newestCursor,
+        historyExhausted: !page.hasMore,
+      };
+      messagePageStoreRef.current[channel.id] = nextPageState;
       setMessagePages((current) => ({
         ...current,
-        [channel.id]: {
-          hasMore: page.hasMore,
-          oldestCursor: page.oldestCursor,
-          newestCursor: current[channel.id]?.newestCursor ?? page.newestCursor,
-          historyExhausted: !page.hasMore,
-        },
+        [channel.id]: nextPageState,
       }));
     } catch (error) {
       recoverAuthorization(error);
@@ -695,6 +730,9 @@ export function useNeighborhoods(): NeighborhoodsController {
       if (mode !== 'beeper') {
         throw new Error('Connect Beeper before sending a message.');
       }
+      if (selectedChannel.kind === 'announcement' || selectedChannel.isReadOnly) {
+        throw new Error('This Beeper Neighborhood room is read-only.');
+      }
 
       const client = clientRef.current;
       const chatID = selectedChannel.beeperChatId;
@@ -730,7 +768,6 @@ export function useNeighborhoods(): NeighborhoodsController {
               pending: true,
               delivery: 'pending',
               deliveryMessage: 'Waiting for Beeper to confirm delivery.',
-              reactions: [],
               attachments: [],
             },
           ],
@@ -746,61 +783,28 @@ export function useNeighborhoods(): NeighborhoodsController {
     [mode, reconcilePendingMessage, recoverAuthorization, selectedChannel],
   );
 
-  const addReaction = useCallback(
-    async (messageId: string, key: string) => {
-      if (mode === 'beeper' && clientRef.current && selectedChannel.beeperChatId) {
-        const client = clientRef.current;
-        const channel = selectedChannel;
-        const chatID = selectedChannel.beeperChatId;
-        const generation = syncGenerationRef.current;
-        try {
-          const existingMessage = (messageStore[channel.id] ?? []).find(
-            (message) => message.id === messageId,
-          );
-          const existingReaction = existingMessage?.reactions.find(
-            (reaction) => reaction.key === key,
-          );
-          if (existingReaction?.mine) {
-            await client.deleteReaction(chatID, messageId, key);
-          } else {
-            await client.addReaction(chatID, messageId, key);
-          }
-          if (
-            generation !== syncGenerationRef.current ||
-            clientRef.current !== client
-          ) {
-            return;
-          }
-          setMessageStore((current) => ({
-            ...current,
-            [channel.id]: (current[channel.id] ?? []).map((message) =>
-              message.id === messageId
-                ? {
-                    ...message,
-                    reactions: toggleCommunityReaction(
-                      message.reactions,
-                      key,
-                      !existingReaction?.mine,
-                    ),
-                  }
-                : message,
-            ),
-          }));
-          return;
-        } catch (error) {
-          recoverAuthorization(error);
-          throw error;
-        }
-      }
-    },
-    [messageStore, mode, recoverAuthorization, selectedChannel],
-  );
+  const resolveAttachment = useCallback(async (attachment: MessageAttachment) => {
+    if (attachment.url) return attachment.url;
+    const client = clientRef.current;
+    const sourceUrl = attachment.sourceUrl?.trim();
+    if (!client || !sourceUrl || !/^(?:mxc|localmxc):\/\//i.test(sourceUrl)) {
+      throw new Error('This attachment is not available through Beeper.');
+    }
+    const url = await client.resolveAssetURL(sourceUrl);
+    if (!url) throw new Error('Beeper could not open this attachment.');
+    return url;
+  }, []);
+
+  const setReadEligible = useCallback((eligible: boolean) => {
+    readEligibleRef.current = eligible;
+  }, []);
 
   const probeBeeper = useCallback(async () => {
     setConnection({ kind: 'probing', message: 'Looking for Beeper Desktop…' });
     try {
       const client = new BeeperClient();
       const info = await client.getInfo();
+      assertSupportedBeeperInfo(info);
       setConnection({
         kind: 'available',
         message: `${info.app.name} ${info.app.version} is ready on this computer`,
@@ -813,7 +817,11 @@ export function useNeighborhoods(): NeighborhoodsController {
     }
   }, []);
 
-  const connectWithOAuth = useCallback(async () => {
+  const connectWithOAuth = useCallback(async (joinConsentAccepted: boolean) => {
+    if (!joinConsentAccepted) {
+      throw new Error('Confirm the public-room notice before joining OpenStation.');
+    }
+    window.localStorage.setItem(JOIN_CONSENT_KEY, JOIN_CONSENT_VERSION);
     setIsBusy(true);
     setConnection({ kind: 'authorizing', message: 'Waiting for Beeper approval…' });
     try {
@@ -865,15 +873,14 @@ export function useNeighborhoods(): NeighborhoodsController {
       isLoadingOlder,
       selectChannel,
       sendMessage,
-      addReaction,
       loadOlderMessages,
+      resolveAttachment,
+      setReadEligible,
       probeBeeper,
       connectWithOAuth,
       disconnect,
-      resetConnection,
     }),
     [
-      addReaction,
       canLoadOlder,
       channels,
       connectWithOAuth,
@@ -882,11 +889,12 @@ export function useNeighborhoods(): NeighborhoodsController {
       isBusy,
       isLoadingOlder,
       loadOlderMessages,
+      resolveAttachment,
+      setReadEligible,
       members,
       messages,
       mode,
       probeBeeper,
-      resetConnection,
       selectChannel,
       selectedChannel,
       sendMessage,
@@ -899,6 +907,21 @@ function findMatrixAccount(accounts: BeeperAccount[]): BeeperAccount | undefined
     (account) =>
       account.accountID === 'matrix' || account.bridge?.type?.toLowerCase() === 'matrix',
   );
+}
+
+async function getOpenStationChats(client: BeeperClient): Promise<BeeperChat[]> {
+  const canonicalRoomIDs = flattenChannels()
+    .map((channel) => channel.roomId)
+    .filter((roomID): roomID is string => Boolean(roomID));
+  const chats = await mapWithConcurrency(canonicalRoomIDs, 3, async (roomID) => {
+    try {
+      return await client.getChat(roomID, 0);
+    } catch (error) {
+      if (error instanceof BeeperApiError && [403, 404].includes(error.status)) return undefined;
+      throw error;
+    }
+  });
+  return chats.filter((chat): chat is BeeperChat => Boolean(chat));
 }
 
 function memberFromMatrixAccount(account: BeeperAccount, avatarUrl?: string): Member {
@@ -920,10 +943,9 @@ async function membersFromBeeperUsers(
   client: BeeperClient,
   users: BeeperUser[],
 ): Promise<Member[]> {
-  const unique = new Map<string, Member>();
-  const distinctUsers = users.filter((user, index) =>
-    Boolean(user.id) && users.findIndex((candidate) => candidate.id === user.id) === index,
-  );
+  const distinctUsers = [...new Map(
+    users.filter((user) => Boolean(user.id)).map((user) => [user.id, user]),
+  ).values()];
   const resolved = await mapWithConcurrency(distinctUsers, 6, async (user) => {
     const name = resolveBeeperIdentityName(user, user.id);
     const avatarUrl = await client.resolveAssetURL(user.imgURL).catch(() => undefined);
@@ -938,8 +960,7 @@ async function membersFromBeeperUsers(
       role: user.isAdmin ? 'moderator' : 'member',
     } satisfies Member;
   });
-  resolved.forEach((member) => unique.set(member.id, member));
-  return [...unique.values()];
+  return resolved;
 }
 
 async function toCommunityMessage(
@@ -955,15 +976,13 @@ async function toCommunityMessage(
   const avatarUrl = knownAuthor?.avatarUrl || await client
     .resolveAssetURL(message.sender?.imgURL)
     .catch(() => undefined);
-  const attachments = await Promise.all(
-    message.attachments.map(async (attachment, index) => ({
+  const attachments = message.attachments.map((attachment, index) => ({
       id: attachment.id || `${message.id}-attachment-${index}`,
       type: attachmentType(attachment.type),
       name: attachment.fileName || 'Attachment',
       size: attachment.fileSize,
-      url: await client.resolveAssetURL(attachment.srcURL).catch(() => undefined),
-    })),
-  );
+      sourceUrl: attachment.srcURL || attachment.id,
+    }));
   const failed = message.sendStatus?.status === 'FAIL_RETRIABLE' ||
     message.sendStatus?.status === 'FAIL_PERMANENT';
   const pending = message.sendStatus?.status === 'PENDING';
@@ -990,7 +1009,6 @@ async function toCommunityMessage(
       : pending
         ? 'Waiting for Beeper to confirm delivery.'
         : undefined,
-    reactions: message.reactions,
     attachments,
   };
 }
@@ -1018,31 +1036,15 @@ function mergeCommunityMessages(
   );
 }
 
-export function toggleCommunityReaction(
-  reactions: Reaction[],
-  key: string,
-  adding: boolean,
-): Reaction[] {
-  const existing = reactions.find((reaction) => reaction.key === key);
-
-  if (adding) {
-    if (!existing) return [...reactions, { key, count: 1, mine: true }];
-    if (existing.mine) return reactions;
-    return reactions.map((reaction) =>
-      reaction.key === key
-        ? { ...reaction, count: reaction.count + 1, mine: true }
-        : reaction,
-    );
-  }
-
-  if (!existing?.mine) return reactions;
-  if (existing.count <= 1) {
-    return reactions.filter((reaction) => reaction.key !== key);
-  }
-  return reactions.map((reaction) =>
-    reaction.key === key
-      ? { ...reaction, count: reaction.count - 1, mine: false }
-      : reaction,
+export function reconcileCommunityMessages(
+  current: CommunityMessage[],
+  incoming: CommunityMessage[],
+  removedMessageIDs: Iterable<string>,
+): CommunityMessage[] {
+  const removed = new Set(removedMessageIDs);
+  return mergeCommunityMessages(
+    current.filter((message) => !removed.has(message.id)),
+    incoming,
   );
 }
 
@@ -1162,8 +1164,39 @@ function pageHasFocus(): boolean {
   return typeof document.hasFocus !== 'function' || document.hasFocus();
 }
 
-export function getExistingBeeperToken(): string | null {
-  return getStoredAccessToken();
+export async function fetchNewMessagePages(
+  client: Pick<BeeperClient, 'getMessagesPage'>,
+  chatID: string,
+  newestCursor?: string | null,
+): Promise<BeeperCursorPage<BeeperMessage>> {
+  if (!newestCursor) return client.getMessagesPage(chatID);
+
+  const items: BeeperMessage[] = [];
+  let cursor = newestCursor;
+  let oldestCursor: string | null = null;
+  let latestCursor: string | null = newestCursor;
+  let hasMore = false;
+
+  for (let pageCount = 0; pageCount < 20; pageCount += 1) {
+    const page = await client.getMessagesPage(chatID, {
+      cursor,
+      direction: 'after',
+    });
+    items.push(...page.items);
+    oldestCursor ??= page.oldestCursor;
+    latestCursor = page.newestCursor ?? latestCursor;
+    hasMore = page.hasMore;
+
+    if (!page.hasMore || !page.newestCursor || page.newestCursor === cursor) break;
+    cursor = page.newestCursor;
+  }
+
+  return {
+    items,
+    hasMore,
+    oldestCursor,
+    newestCursor: latestCursor,
+  };
 }
 
 function isAuthorizationFailure(error: unknown): error is BeeperApiError {

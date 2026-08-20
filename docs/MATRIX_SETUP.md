@@ -6,9 +6,9 @@ Neighborhoods uses the Matrix account already inside Beeper. `openstation.chat` 
 
 1. Sign into the Beeper account that will own the OpenStation community.
 2. Keep Beeper Desktop open and enable **Settings → Integrations → Desktop API**.
-3. Open `https://openstation.chat/?provision=1`.
-4. Connect and approve OpenStation's local read/write access.
-5. Press **Create OpenStation Community** once.
+3. Use the private operator provisioning workflow described in the governance runbook. The public member app intentionally contains no provisioning controls.
+4. Connect and approve OpenStation's local read/write access only from the operator workflow.
+5. Confirm the administrator identity and create the community once.
 
 The operator workflow creates six supported public rooms first, followed by a public Matrix Space whose initial `m.space.child` state links every room. Welcome and Announcements restrict ordinary `m.room.message` events while still allowing reactions. The remaining rooms use normal public-chat permissions.
 
@@ -37,5 +37,5 @@ Members open `openstation.chat`, connect Beeper, and approve the local integrati
 - Stable Space and room IDs committed to `src/community.ts`
 - Welcome and Announcements tested as read-only for an ordinary member
 - Fresh Beeper account joins all rooms automatically
-- Messages, unread state, members, and reactions contain only live Beeper data
+- Messages, unread state, and members contain only live Beeper data
 - At least one additional moderator added before the public launch

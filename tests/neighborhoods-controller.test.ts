@@ -4,8 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConnectPanel } from '../src/components/ConnectPanel';
 import {
   useNeighborhoods,
+  fetchNewMessagePages,
+  reconcileCommunityMessages,
   resolveBeeperIdentityName,
-  toggleCommunityReaction,
   type NeighborhoodsController,
 } from '../src/use-neighborhoods';
 import { invalidTokenV5 } from './fixtures/beeper-v5';
@@ -47,27 +48,68 @@ afterEach(async () => {
 });
 
 describe('Neighborhoods connection controller', () => {
-  it('updates queued Beeper reactions immediately without double-counting', () => {
-    expect(toggleCommunityReaction([], '✨', true)).toEqual([
-      { key: '✨', count: 1, mine: true },
-    ]);
-    expect(
-      toggleCommunityReaction([{ key: '✨', count: 2 }], '✨', true),
-    ).toEqual([{ key: '✨', count: 3, mine: true }]);
-    expect(
-      toggleCommunityReaction(
-        [{ key: '✨', count: 3, mine: true }],
-        '✨',
-        false,
-      ),
-    ).toEqual([{ key: '✨', count: 2, mine: false }]);
-    expect(
-      toggleCommunityReaction(
-        [{ key: '✨', count: 1, mine: true }],
-        '✨',
-        false,
-      ),
-    ).toEqual([]);
+  it('drains every newer cursor page without leaving a message gap', async () => {
+    const message = (id: string, timestamp: string) => ({
+      id,
+      chatID: '!general:beeper.com',
+      senderID: '@nick:beeper.com',
+      timestamp,
+      text: id,
+      isEdited: false,
+      removed: false,
+      attachments: [],
+    });
+    const getMessagesPage = vi.fn()
+      .mockResolvedValueOnce({
+        items: [message('$third', '2026-08-20T00:00:03.000Z')],
+        hasMore: true,
+        oldestCursor: 'cursor-3',
+        newestCursor: 'cursor-3',
+      })
+      .mockResolvedValueOnce({
+        items: [message('$fourth', '2026-08-20T00:00:04.000Z')],
+        hasMore: false,
+        oldestCursor: 'cursor-4',
+        newestCursor: 'cursor-4',
+      });
+
+    await expect(fetchNewMessagePages(
+      { getMessagesPage },
+      '!general:beeper.com',
+      'cursor-2',
+    )).resolves.toMatchObject({
+      items: [{ id: '$third' }, { id: '$fourth' }],
+      newestCursor: 'cursor-4',
+    });
+    expect(getMessagesPage).toHaveBeenNthCalledWith(1, '!general:beeper.com', {
+      cursor: 'cursor-2',
+      direction: 'after',
+    });
+    expect(getMessagesPage).toHaveBeenNthCalledWith(2, '!general:beeper.com', {
+      cursor: 'cursor-3',
+      direction: 'after',
+    });
+  });
+
+  it('removes a displayed message when Beeper returns its deletion tombstone', () => {
+    const displayed = {
+      id: '$deleted-later',
+      channelId: 'general',
+      author: {
+        id: '@nick:beeper.com',
+        name: 'Nick',
+        handle: '@nick',
+        avatar: 'N',
+        color: '#9f98ff',
+        presence: 'unknown' as const,
+        role: 'member' as const,
+      },
+      body: 'This will be deleted',
+      sentAt: '2026-08-20T00:00:00.000Z',
+      attachments: [],
+    };
+
+    expect(reconcileCommunityMessages([displayed], [], ['$deleted-later'])).toEqual([]);
   });
 
   it('uses a real Beeper handle instead of the generic account placeholder', () => {
@@ -160,13 +202,20 @@ describe('ConnectPanel recovery controls', () => {
     const connectButton = container.querySelector<HTMLButtonElement>(
       'button.connect-primary',
     );
+    const consent = container.querySelector<HTMLInputElement>('.join-consent input');
     expect(connectButton).not.toBeNull();
+    expect(connectButton?.disabled).toBe(true);
+
+    await act(async () => {
+      consent?.click();
+    });
     expect(connectButton?.disabled).toBe(false);
 
     await act(async () => {
       connectButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(onOAuth).toHaveBeenCalledOnce();
+    expect(onOAuth).toHaveBeenCalledWith(true);
   });
 });
 

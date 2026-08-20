@@ -8,7 +8,7 @@ export interface CommunityManifest {
   description: string;
   publicUrl: string;
   homeserver: string;
-  spaceRoomId?: string;
+  spaceRoomId: string;
   accent: string;
   categories: ChannelCategory[];
 }
@@ -22,11 +22,9 @@ export interface ChannelCategory {
 export interface ChannelDefinition {
   id: string;
   name: string;
-  alias?: string;
   topic: string;
   kind: ChannelKind;
-  discoveryTitles: string[];
-  roomId?: string;
+  roomId: string;
 }
 
 export interface CommunityChannel extends ChannelDefinition {
@@ -53,17 +51,12 @@ export interface Member {
   note?: string;
 }
 
-export interface Reaction {
-  key: string;
-  count: number;
-  mine?: boolean;
-}
-
 export interface MessageAttachment {
   id: string;
   type: 'image' | 'file' | 'audio' | 'video';
   name: string;
   url?: string;
+  sourceUrl?: string;
   size?: number;
 }
 
@@ -77,7 +70,6 @@ export interface CommunityMessage {
   pending?: boolean;
   delivery?: 'pending' | 'sent' | 'failed' | 'unconfirmed';
   deliveryMessage?: string;
-  reactions: Reaction[];
   attachments: MessageAttachment[];
 }
 

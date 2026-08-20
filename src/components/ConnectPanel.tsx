@@ -1,4 +1,4 @@
-import { Check, ExternalLink, Laptop, LoaderCircle, PlugZap, Radio, ShieldCheck, X } from 'lucide-react';
+import { Check, ExternalLink, Laptop, LoaderCircle, PlugZap, ShieldCheck, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { ConnectionState } from '../types';
 import { OpenStationMark } from './OpenStationMark';
@@ -11,7 +11,7 @@ interface ConnectPanelProps {
   busy: boolean;
   onClose: () => void;
   onProbe: () => Promise<void>;
-  onOAuth: () => Promise<void>;
+  onOAuth: (joinConsentAccepted: boolean) => Promise<void>;
   onDisconnect: () => void;
 }
 
@@ -26,6 +26,7 @@ export function ConnectPanel({
   onDisconnect,
 }: ConnectPanelProps) {
   const [localError, setLocalError] = useState('');
+  const [joinConsent, setJoinConsent] = useState(false);
   const dialogRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -33,10 +34,6 @@ export function ConnectPanel({
   useEffect(() => {
     onCloseRef.current = onClose;
   }, [onClose]);
-
-  useEffect(() => {
-    if (open && connection.kind === 'disconnected') void onProbe();
-  }, [connection.kind, onProbe, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -92,18 +89,23 @@ export function ConnectPanel({
     };
   }, [open]);
 
+  useEffect(() => {
+    if (connection.kind !== 'error') setLocalError('');
+  }, [connection.kind]);
+
   if (!open) return null;
 
   async function connectOAuth() {
     setLocalError('');
     try {
-      await onOAuth();
+      await onOAuth(joinConsent);
     } catch (error) {
       setLocalError(error instanceof Error ? error.message : 'Could not connect.');
     }
   }
 
-  const available = ['available', 'connected', 'error'].includes(connection.kind);
+  const readyToAuthorize = ['available', 'connected', 'error'].includes(connection.kind);
+  const shouldProbe = ['disconnected', 'unavailable'].includes(connection.kind);
   const errorMessage = localError || (connection.kind === 'error' ? connection.message : '');
 
   return (
@@ -127,7 +129,7 @@ export function ConnectPanel({
         </header>
 
         <div className="connect-panel__art" aria-hidden="true">
-          <img src="/assets/openstation-onboarding-hero-v2.png" alt="" />
+          <img src="/assets/openstation-onboarding-hero-v2-ui.webp" alt="" />
           <span>BEEPER IDENTITY</span>
           <i />
           <span>BEEPER NEIGHBORHOOD</span>
@@ -148,14 +150,14 @@ export function ConnectPanel({
           </div>
           {connection.kind === 'probing' && <LoaderCircle className="spin" size={20} aria-hidden="true" />}
           {connection.kind === 'connected' && <Check size={20} aria-hidden="true" />}
-          {['unavailable', 'error'].includes(connection.kind) && (
+          {connection.kind === 'unavailable' && (
             <button type="button" onClick={() => void onProbe()}>TRY AGAIN</button>
           )}
         </div>
 
         {mode === 'beeper' ? (
           <div className="connected-card">
-            <span><Radio size={23} /></span>
+            <span><Check size={23} /></span>
             <div>
               <h2>You are connected.</h2>
               <p>OpenStation automatically adds its neighborhood rooms through your local Beeper app, then loads their real messages and members.</p>
@@ -175,20 +177,43 @@ export function ConnectPanel({
               </li>
               <li>
                 <span><ShieldCheck size={20} /></span>
-                <div><strong>3. Approve OpenStation</strong><small>Beeper will show a permission screen. Approve it to join the six OpenStation rooms automatically.</small></div>
+                <div><strong>3. Approve OpenStation</strong><small>Beeper will show a permission screen. Approve it to join the OpenStation Neighborhood and its six rooms.</small></div>
               </li>
             </ol>
+
+            <label className="join-consent">
+              <input
+                type="checkbox"
+                checked={joinConsent}
+                onChange={(event) => setJoinConsent(event.target.checked)}
+              />
+              <span>
+                <strong>I understand these are public Beeper Neighborhood rooms.</strong>
+                <small>Members can see shared history from before they joined. The rooms are not end-to-end encrypted, and copies may remain with participating services.</small>
+              </span>
+            </label>
 
             <button
               className="connect-primary"
               type="button"
-              disabled={!available || busy}
-              aria-busy={busy}
-              onClick={() => void connectOAuth()}
+              disabled={connection.kind === 'probing' || busy || (!shouldProbe && (!readyToAuthorize || !joinConsent))}
+              aria-busy={connection.kind === 'probing' || busy}
+              onClick={() => {
+                if (shouldProbe) {
+                  setLocalError('');
+                  void onProbe();
+                } else {
+                  void connectOAuth();
+                }
+              }}
             >
-              {busy ? <LoaderCircle className="spin" size={19} /> : <PlugZap size={19} />}
-              {connection.kind === 'error' ? 'REAUTHORIZE WITH BEEPER' : 'JOIN OPENSTATION'}
-              <ExternalLink size={16} />
+              {connection.kind === 'probing' || busy ? <LoaderCircle className="spin" size={19} /> : <PlugZap size={19} />}
+              {shouldProbe
+                ? 'CHECK BEEPER ON THIS COMPUTER'
+                : connection.kind === 'error'
+                  ? 'REAUTHORIZE WITH BEEPER'
+                  : 'AGREE & JOIN OPENSTATION'}
+              {!shouldProbe && <ExternalLink size={16} />}
             </button>
 
             <div className="privacy-note">
@@ -226,7 +251,7 @@ function getFocusableElements(container: HTMLElement): HTMLElement[] {
 function readoutTitle(connection: ConnectionState): string {
   if (connection.kind === 'connected') return 'Signal locked';
   if (connection.kind === 'available') return 'Beeper detected';
-  if (connection.kind === 'probing') return 'Listening on localhost:23373';
+  if (connection.kind === 'probing') return 'Checking Beeper on this computer';
   if (connection.kind === 'unavailable') return 'No local signal yet';
   if (connection.kind === 'error') return 'Connection needs attention';
   return 'Ready to connect';

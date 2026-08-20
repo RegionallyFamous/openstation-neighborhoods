@@ -8,6 +8,10 @@ import { useNeighborhoods } from './use-neighborhoods';
 export default function App() {
   const neighborhoods = useNeighborhoods();
   const [connectOpen, setConnectOpen] = useState(true);
+  const [channelsCompact, setChannelsCompact] = useState(
+    () => window.matchMedia('(max-width: 620px)').matches,
+  );
+  const [channelsOpen, setChannelsOpen] = useState(false);
   const [membersCompact, setMembersCompact] = useState(
     () => window.matchMedia('(max-width: 1180px)').matches,
   );
@@ -15,16 +19,24 @@ export default function App() {
     () => !window.matchMedia('(max-width: 1180px)').matches,
   );
   const appShellRef = useRef<HTMLDivElement>(null);
+  const channelsTriggerRef = useRef<HTMLElement | null>(null);
   const membersTriggerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
+    const channelsLayout = window.matchMedia('(max-width: 620px)');
     const membersLayout = window.matchMedia('(max-width: 1180px)');
+    const updateChannelsLayout = (event: MediaQueryListEvent) => {
+      setChannelsCompact(event.matches);
+      setChannelsOpen(false);
+    };
     const updateMembersLayout = (event: MediaQueryListEvent) => {
       setMembersCompact(event.matches);
       if (event.matches) setMembersOpen(false);
     };
+    channelsLayout.addEventListener('change', updateChannelsLayout);
     membersLayout.addEventListener('change', updateMembersLayout);
     return () => {
+      channelsLayout.removeEventListener('change', updateChannelsLayout);
       membersLayout.removeEventListener('change', updateMembersLayout);
     };
   }, []);
@@ -40,25 +52,40 @@ export default function App() {
     }
   }, []);
 
+  const closeChannels = useCallback((restoreFocus = true) => {
+    setChannelsOpen(false);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => channelsTriggerRef.current?.focus());
+    }
+  }, []);
+
+  const toggleChannels = useCallback(() => {
+    setChannelsOpen((current) => {
+      if (!current && document.activeElement instanceof HTMLElement) {
+        channelsTriggerRef.current = document.activeElement;
+        setMembersOpen(false);
+      }
+      return !current;
+    });
+  }, []);
+
   const toggleMembers = useCallback(() => {
     setMembersOpen((current) => {
       if (!current && document.activeElement instanceof HTMLElement) {
         membersTriggerRef.current = document.activeElement;
+        setChannelsOpen(false);
       }
       return !current;
     });
   }, []);
 
   useEffect(() => {
-    const memberTrigger = appShellRef.current?.querySelector<HTMLButtonElement>(
-      '.conversation-header__tools > button:last-of-type',
-    );
-    if (memberTrigger) {
-      memberTrigger.setAttribute('aria-controls', 'member-drawer');
-      memberTrigger.setAttribute('aria-expanded', String(membersOpen));
-      memberTrigger.setAttribute('aria-label', membersOpen ? 'Hide members' : 'Show members');
-    }
-  }, [membersOpen]);
+    if (!channelsCompact || !channelsOpen) return;
+    const focusFrame = window.requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>('#channel-drawer button:not([disabled])')?.focus();
+    });
+    return () => window.cancelAnimationFrame(focusFrame);
+  }, [channelsCompact, channelsOpen]);
 
   useEffect(() => {
     if (!membersCompact || !membersOpen) return;
@@ -67,6 +94,17 @@ export default function App() {
     });
     return () => window.cancelAnimationFrame(focusFrame);
   }, [membersCompact, membersOpen]);
+
+  useEffect(() => {
+    if (!(channelsCompact && channelsOpen)) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      closeChannels();
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [channelsCompact, channelsOpen, closeChannels]);
 
   useEffect(() => {
     if (!(membersCompact && membersOpen)) return;
@@ -79,7 +117,10 @@ export default function App() {
     return () => document.removeEventListener('keydown', handleEscape);
   }, [closeMembers, membersCompact, membersOpen]);
 
-  const membersHidden = !membersOpen;
+  const channelsHidden = (channelsCompact && !channelsOpen) || (membersCompact && membersOpen);
+  const membersHidden = !membersOpen || (channelsCompact && channelsOpen);
+  const contentBlocked = (channelsCompact && channelsOpen) || (membersCompact && membersOpen);
+  const compactDrawerOpen = contentBlocked;
 
   return (
     <div className="neighborhoods-app">
@@ -91,8 +132,10 @@ export default function App() {
       >
         <div className="app-grain" aria-hidden="true" />
         <div
-          className="drawer-shell"
+          className={`drawer-shell channel-drawer${channelsOpen ? ' is-open' : ''}`}
           id="channel-drawer"
+          inert={channelsHidden}
+          aria-hidden={channelsHidden || undefined}
         >
           <ChannelSidebar
             manifest={neighborhoods.manifest}
@@ -100,7 +143,10 @@ export default function App() {
             selectedChannelId={neighborhoods.selectedChannel.id}
             connection={neighborhoods.connection}
             mode={neighborhoods.mode}
-            onSelectChannel={neighborhoods.selectChannel}
+            onSelectChannel={(channelId) => {
+              neighborhoods.selectChannel(channelId);
+              if (channelsCompact) closeChannels(false);
+            }}
             onOpenConnect={() => setConnectOpen(true)}
             onDisconnect={neighborhoods.disconnect}
           />
@@ -113,11 +159,29 @@ export default function App() {
           canLoadOlder={neighborhoods.canLoadOlder}
           isLoadingOlder={neighborhoods.isLoadingOlder}
           onSend={neighborhoods.sendMessage}
-          onReact={neighborhoods.addReaction}
           onLoadOlder={neighborhoods.loadOlderMessages}
+          onResolveAttachment={neighborhoods.resolveAttachment}
+          onReadEligibilityChange={neighborhoods.setReadEligible}
+          onToggleChannels={toggleChannels}
           onToggleMembers={toggleMembers}
           onOpenConnect={() => setConnectOpen(true)}
+          channelsOpen={channelsOpen}
+          membersOpen={membersOpen}
+          blockedByDrawer={contentBlocked}
+          readingBlocked={contentBlocked || connectOpen}
         />
+        {compactDrawerOpen && (
+          <button
+            className="drawer-scrim"
+            type="button"
+            tabIndex={-1}
+            aria-label="Close navigation drawer"
+            onClick={() => {
+              if (channelsCompact && channelsOpen) closeChannels();
+              if (membersCompact && membersOpen) closeMembers();
+            }}
+          />
+        )}
         <div
           className="drawer-shell"
           id="member-drawer"

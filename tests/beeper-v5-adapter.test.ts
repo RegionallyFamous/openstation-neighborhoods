@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  assertSupportedBeeperInfo,
   BeeperClient,
   normalizeAccount,
   normalizeBeeperBaseUrl,
@@ -7,6 +8,7 @@ import {
   normalizeMessage,
   normalizeResourceURL,
 } from '../src/beeper/client';
+import { beeperInfoV5 } from './fixtures/beeper-v5';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -14,6 +16,18 @@ afterEach(() => {
 });
 
 describe('Beeper API v5 adapter', () => {
+  it('accepts the supported Beeper version and rejects older or remote services', () => {
+    expect(() => assertSupportedBeeperInfo(beeperInfoV5)).not.toThrow();
+    expect(() => assertSupportedBeeperInfo({
+      ...beeperInfoV5,
+      app: { ...beeperInfoV5.app, version: '4.2.935' },
+    })).toThrow('4.2.936 or newer');
+    expect(() => assertSupportedBeeperInfo({
+      ...beeperInfoV5,
+      server: { ...beeperInfoV5.server, remote_access: true },
+    })).toThrow('not a supported Beeper Desktop');
+  });
+
   it('normalizes participant pagination from the current chat shape', () => {
     expect(
       normalizeChat({
@@ -36,7 +50,7 @@ describe('Beeper API v5 adapter', () => {
     });
   });
 
-  it('normalizes current sender, edit, attachment, and participant reaction fields', () => {
+  it('normalizes current sender, edit, and attachment fields', () => {
     expect(
       normalizeMessage(
         {
@@ -50,18 +64,6 @@ describe('Beeper API v5 adapter', () => {
           type: 'TEXT',
           text: 'Hello from Beeper',
           editedTimestamp: '2026-08-19T12:01:00Z',
-          reactions: [
-            {
-              id: '@nick:beeper.com|✨',
-              reactionKey: '✨',
-              participantID: '@nick:beeper.com',
-            },
-            {
-              id: '@june:beeper.com|✨',
-              reactionKey: '✨',
-              participantID: '@june:beeper.com',
-            },
-          ],
           attachments: [
             {
               id: 'mxc://beeper/image',
@@ -71,26 +73,17 @@ describe('Beeper API v5 adapter', () => {
             },
           ],
         },
-        '@nick:beeper.com',
       ),
     ).toMatchObject({
       sender: { id: '@june:beeper.com', fullName: 'June' },
       isEdited: true,
-      reactions: [
-        {
-          key: '✨',
-          count: 2,
-          mine: true,
-          participantIDs: ['@nick:beeper.com', '@june:beeper.com'],
-        },
-      ],
       attachments: [
         { type: 'img', srcURL: 'https://cdn.example/demo.png' },
       ],
     });
   });
 
-  it('omits hidden, deleted, and standalone reaction events', () => {
+  it('preserves hidden and deleted tombstones while omitting standalone reaction events', () => {
     const message = {
       id: '$event',
       chatID: '!general:beeper.com',
@@ -98,8 +91,14 @@ describe('Beeper API v5 adapter', () => {
       timestamp: '2026-08-19T12:00:00Z',
       text: 'secret',
     };
-    expect(normalizeMessage({ ...message, isHidden: true })).toBeNull();
-    expect(normalizeMessage({ ...message, isDeleted: true })).toBeNull();
+    expect(normalizeMessage({ ...message, isHidden: true })).toMatchObject({
+      id: '$event',
+      removed: true,
+    });
+    expect(normalizeMessage({ ...message, isDeleted: true })).toMatchObject({
+      id: '$event',
+      removed: true,
+    });
     expect(normalizeMessage({ ...message, type: 'REACTION' })).toBeNull();
   });
 
@@ -148,12 +147,12 @@ describe('Beeper API v5 adapter', () => {
     });
     expect(page.items).toHaveLength(1);
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:23373/v1/chats?accountIDs=matrix',
+      'http://127.0.0.1:23373/v1/chats?accountIDs=matrix',
       expect.any(Object),
     );
   });
 
-  it('preserves message cursors while dropping non-display events', async () => {
+  it('preserves message cursors and deletion tombstones', async () => {
     const common = {
       chatID: '!general:beeper.com',
       senderID: '@june:beeper.com',
@@ -178,10 +177,11 @@ describe('Beeper API v5 adapter', () => {
       '!general:beeper.com',
       { cursor: 'next|page', direction: 'before' },
     );
-    expect(page.items.map((message) => message.id)).toEqual(['$shown']);
+    expect(page.items.map((message) => message.id)).toEqual(['$shown', '$hidden']);
+    expect(page.items[1]).toMatchObject({ removed: true });
     expect(page).toMatchObject({ oldestCursor: 'old', newestCursor: 'new' });
     expect(fetch).toHaveBeenCalledWith(
-      'http://localhost:23373/v1/chats/!general%3Abeeper.com/messages?cursor=next%7Cpage&direction=before',
+      'http://127.0.0.1:23373/v1/chats/!general%3Abeeper.com/messages?cursor=next%7Cpage&direction=before',
       expect.any(Object),
     );
   });
@@ -216,40 +216,32 @@ describe('Beeper API v5 adapter', () => {
       participants: [{ imgURL: 'mxc://beeper.com/avatar' }],
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:23373/v1/chats/!general%3Abeeper.com?maxParticipantCount=-1',
+      'http://127.0.0.1:23373/v1/chats/!general%3Abeeper.com?maxParticipantCount=-1',
       expect.any(Object),
     );
   });
 
-  it('retrieves send status and removes an existing reaction', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        jsonResponse({
-          id: '$message',
-          chatID: '!general:beeper.com',
-          senderID: '@nick:beeper.com',
-          timestamp: '2026-08-19T12:00:00Z',
-          text: 'Delivered',
-          sendStatus: {
-            status: 'SUCCESS',
-            timestamp: '2026-08-19T12:00:01Z',
-          },
-        }),
-      )
-      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+  it('retrieves send status for an existing message', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        id: '$message',
+        chatID: '!general:beeper.com',
+        senderID: '@nick:beeper.com',
+        timestamp: '2026-08-19T12:00:00Z',
+        text: 'Delivered',
+        sendStatus: {
+          status: 'SUCCESS',
+          timestamp: '2026-08-19T12:00:01Z',
+        },
+      }),
+    );
     vi.stubGlobal('fetch', fetchMock);
 
     const client = new BeeperClient({ token: 'test-token' });
     await expect(
       client.getMessage('!general:beeper.com', 'pending|message'),
     ).resolves.toMatchObject({ sendStatus: { status: 'SUCCESS' } });
-    await client.deleteReaction('!general:beeper.com', '$message', '✨');
-
-    expect(fetchMock.mock.calls[1][0]).toBe(
-      'http://localhost:23373/v1/chats/!general%3Abeeper.com/messages/%24message/reactions/%E2%9C%A8',
-    );
-    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: 'DELETE' });
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 
   it('streams Beeper-local assets once and reuses the blob URL', async () => {
@@ -319,55 +311,15 @@ describe('Beeper API v5 adapter', () => {
     expect((init?.headers as Headers).get('Authorization')).toBe('Bearer test-token');
   });
 
-  it('uses the Matrix account identity to identify the user\'s own reactions', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        jsonResponse([
-          {
-            accountID: 'matrix',
-            bridge: { id: 'matrix', provider: 'cloud', type: 'matrix' },
-            status: 'connected',
-            user: { id: '@nick:beeper.com', fullName: 'Nick' },
-          },
-        ]),
-      )
-      .mockResolvedValueOnce(
-        jsonResponse({
-          items: [
-            {
-              id: '$message',
-              chatID: '!general:beeper.com',
-              senderID: '@june:beeper.com',
-              timestamp: '2026-08-19T12:00:00Z',
-              reactions: [
-                {
-                  id: '@nick:beeper.com|👍',
-                  reactionKey: '👍',
-                  participantID: '@nick:beeper.com',
-                },
-              ],
-            },
-          ],
-          hasMore: false,
-          oldestCursor: null,
-          newestCursor: null,
-        }),
-      );
-    vi.stubGlobal('fetch', fetchMock);
-
-    const client = new BeeperClient({ token: 'test-token' });
-    await client.getAccounts();
-    const messages = await client.getMessages('!general:beeper.com');
-    expect(messages[0].reactions[0]).toMatchObject({ key: '👍', mine: true });
-  });
-
   it('accepts only loopback API bases and browser-safe resource URLs', () => {
     expect(normalizeBeeperBaseUrl('http://127.0.0.1:23373/')).toBe(
       'http://127.0.0.1:23373',
     );
     expect(() => normalizeBeeperBaseUrl('https://desktop.example')).toThrow(
-      'loopback HTTP address',
+      '127.0.0.1',
+    );
+    expect(() => normalizeBeeperBaseUrl('http://localhost:23373')).toThrow(
+      '127.0.0.1',
     );
     expect(normalizeResourceURL('https://cdn.example/file.png')).toBe(
       'https://cdn.example/file.png',

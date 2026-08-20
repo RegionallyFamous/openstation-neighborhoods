@@ -8,7 +8,7 @@
   "license": "GPL-2.0-or-later",
   "packageManager": "npm@11.18.0",
   "engines": {
-    "node": ">=22.13.0 <27"
+    "node": ">=22.20.0 <27"
   },
   "scripts": {
     "dev": "vite",
@@ -38,5 +38,8 @@
     "typescript": "7.0.2",
     "vite": "8.2.1",
     "vitest": "4.1.11"
+  },
+  "overrides": {
+    "js-yaml": "4.3.1"
   }
 }

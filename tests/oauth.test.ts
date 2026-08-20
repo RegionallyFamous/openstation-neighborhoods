@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   completeBeeperOAuthCallback,
   createCodeChallenge,
+  getStoredAccessToken,
   introspectBeeperAccessToken,
   invalidateBeeperAuthorization,
   revokeBeeperAccessToken,
@@ -75,6 +76,17 @@ describe('Beeper OAuth PKCE', () => {
     expect(window.localStorage.getItem('openstation-neighborhoods:oauth-client')).toBeNull();
   });
 
+  it('clears an access token after its stored expiry time', () => {
+    sessionStorage.setItem('openstation-neighborhoods:access-token', 'expired-token');
+    sessionStorage.setItem(
+      'openstation-neighborhoods:access-token-expires',
+      String(Date.now() - 1_000),
+    );
+
+    expect(getStoredAccessToken()).toBeNull();
+    expect(sessionStorage.getItem('openstation-neighborhoods:access-token')).toBeNull();
+  });
+
   it('introspects an access token using Beeper OAuth metadata', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ active: true }), {
@@ -94,6 +106,19 @@ describe('Beeper OAuth PKCE', () => {
     expect(init?.method).toBe('POST');
     expect(init?.redirect).toBe('error');
     expect(String(init?.body)).toContain('token=approved-token');
+  });
+
+  it('rejects an OAuth endpoint on a different loopback origin', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      introspectBeeperAccessToken(
+        'approved-token',
+        'http://localhost:23373/oauth/introspect',
+      ),
+    ).rejects.toThrow('127.0.0.1');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('revokes an OAuth token through the advertised local endpoint', async () => {
