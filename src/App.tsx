@@ -1,13 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { LoaderCircle } from 'lucide-react';
+import { hasStoredBeeperSession } from './beeper/oauth';
 import { ChannelSidebar } from './components/ChannelSidebar';
 import { ConnectPanel } from './components/ConnectPanel';
 import { MemberRail } from './components/MemberRail';
 import { MessageTimeline } from './components/MessageTimeline';
+import type { ConnectionState } from './types';
 import { useNeighborhoods } from './use-neighborhoods';
 
 export default function App() {
   const neighborhoods = useNeighborhoods();
-  const [connectOpen, setConnectOpen] = useState(true);
+  const [restoreOnStart] = useState(() => shouldRestoreBeeperSession(
+    window.location.href,
+    hasStoredBeeperSession(),
+  ));
+  const [connectOpen, setConnectOpen] = useState(() => !restoreOnStart);
+  const [restoringSession, setRestoringSession] = useState(restoreOnStart);
   const [channelsCompact, setChannelsCompact] = useState(
     () => window.matchMedia('(max-width: 620px)').matches,
   );
@@ -42,7 +50,19 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (neighborhoods.connection.kind === 'connected') setConnectOpen(false);
+    if (neighborhoods.connection.kind === 'connected') {
+      setRestoringSession(false);
+      setConnectOpen(false);
+      return;
+    }
+    if (
+      neighborhoods.connection.kind === 'error' ||
+      neighborhoods.connection.kind === 'available' ||
+      neighborhoods.connection.kind === 'unavailable'
+    ) {
+      setRestoringSession(false);
+      setConnectOpen(true);
+    }
   }, [neighborhoods.connection.kind]);
 
   const closeMembers = useCallback((restoreFocus = true) => {
@@ -207,6 +227,27 @@ export default function App() {
         onOAuth={neighborhoods.connectWithOAuth}
         onDisconnect={neighborhoods.disconnect}
       />
+      {restoringSession && (
+        <div className="session-restore" role="status" aria-live="polite">
+          <LoaderCircle className="spin" size={17} aria-hidden="true" />
+          <span>
+            <strong>Welcome back.</strong>
+            <small>{restoreMessage(neighborhoods.connection.kind)}</small>
+          </span>
+        </div>
+      )}
     </div>
   );
+}
+
+export function shouldRestoreBeeperSession(href: string, hasStoredSession: boolean): boolean {
+  if (hasStoredSession) return true;
+  const url = new URL(href);
+  return url.searchParams.has('code') || url.searchParams.has('error');
+}
+
+function restoreMessage(kind: ConnectionState['kind']): string {
+  if (kind === 'authorizing') return 'Checking your Beeper key…';
+  if (kind === 'probing') return 'Looking for Beeper…';
+  return 'Waking up your neighborhood…';
 }

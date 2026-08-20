@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { FormEvent, Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { CommunityChannel, CommunityMessage, MessageAttachment } from '../types';
-import { OpenStationMark } from './OpenStationMark';
+import { MioCompanion } from './MioCompanion';
 
 interface MessageTimelineProps {
   channel: CommunityChannel;
@@ -152,11 +152,11 @@ export function MessageTimeline({
             </div>
             <p>{channel.topic}</p>
           </div>
-          <div className="channel-welcome__signal" aria-hidden="true">
-            <span className="channel-welcome__orbit channel-welcome__orbit--outer" />
-            <span className="channel-welcome__orbit channel-welcome__orbit--inner" />
-            <span className="channel-welcome__beacon" />
-            <span className="channel-welcome__station"><OpenStationMark /></span>
+          <div className="channel-welcome__signal">
+            <span className="channel-welcome__orbit channel-welcome__orbit--outer" aria-hidden="true" />
+            <span className="channel-welcome__orbit channel-welcome__orbit--inner" aria-hidden="true" />
+            <span className="channel-welcome__beacon" aria-hidden="true" />
+            <MioCompanion channel={channel} mode={mode} />
           </div>
         </section>
 

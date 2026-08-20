@@ -3,6 +3,7 @@ import {
   completeBeeperOAuthCallback,
   createCodeChallenge,
   getStoredAccessToken,
+  hasStoredBeeperSession,
   introspectBeeperAccessToken,
   invalidateBeeperAuthorization,
   revokeBeeperAccessToken,
@@ -85,6 +86,13 @@ describe('Beeper OAuth PKCE', () => {
 
     expect(getStoredAccessToken()).toBeNull();
     expect(sessionStorage.getItem('openstation-neighborhoods:access-token')).toBeNull();
+  });
+
+  it('recognizes a saved token for a same-tab refresh', () => {
+    sessionStorage.setItem('openstation-neighborhoods:access-token', 'still-active-token');
+
+    expect(hasStoredBeeperSession()).toBe(true);
+    expect(getStoredAccessToken()).toBe('still-active-token');
   });
 
   it('introspects an access token using Beeper OAuth metadata', async () => {

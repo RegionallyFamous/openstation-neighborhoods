@@ -8,6 +8,12 @@ OpenStation Neighborhoods uses the phrase **Powered by Beeper** to identify the 
 
 The wordmark is a third-party trademark asset. It is not covered by this repository's GPL license and must not be redrawn, recolored, stretched, or incorporated into the OpenStation logo.
 
+## OpenStation character art
+
+`public/brand/mio-orbita.webp` is an optimized web derivative of the approved
+OpenStation-owned Mio Orbita character artwork. It is part of the OpenStation
+visual identity and is not a Beeper asset.
+
 ## Application treatment
 
 - Keep **Powered by** as live text outside the logo.

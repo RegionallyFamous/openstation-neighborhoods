@@ -40,6 +40,10 @@ export function getStoredAccessToken(): string | null {
   return token;
 }
 
+export function hasStoredBeeperSession(): boolean {
+  return Boolean(getStoredAccessToken());
+}
+
 export function disconnectBeeper(): void {
   oauthCallbackCompletion = null;
   sessionStorage.removeItem(ACCESS_TOKEN_KEY);

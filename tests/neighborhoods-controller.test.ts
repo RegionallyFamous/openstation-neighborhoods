@@ -2,6 +2,9 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConnectPanel } from '../src/components/ConnectPanel';
+import { MioCompanion } from '../src/components/MioCompanion';
+import { shouldRestoreBeeperSession } from '../src/App';
+import { flattenChannels } from '../src/community';
 import {
   useNeighborhoods,
   fetchNewMessagePages,
@@ -48,6 +51,12 @@ afterEach(async () => {
 });
 
 describe('Neighborhoods connection controller', () => {
+  it('restores a saved tab without reopening onboarding', () => {
+    expect(shouldRestoreBeeperSession('https://openstation.chat/', true)).toBe(true);
+    expect(shouldRestoreBeeperSession('https://openstation.chat/?code=fresh', false)).toBe(true);
+    expect(shouldRestoreBeeperSession('https://openstation.chat/', false)).toBe(false);
+  });
+
   it('drains every newer cursor page without leaving a message gap', async () => {
     const message = (id: string, timestamp: string) => ({
       id,
@@ -174,6 +183,30 @@ describe('Neighborhoods connection controller', () => {
     const [introspectionInput, introspectionInit] = fetchMock.mock.calls[1];
     expect(String(introspectionInput)).toContain('/oauth/introspect');
     expect(String(introspectionInit?.body)).toContain('token=stale-synthetic-token');
+  });
+});
+
+describe('Mio companion', () => {
+  it('responds when a neighbor says hello', async () => {
+    const general = flattenChannels().find((channel) => channel.id === 'general');
+    expect(general).toBeDefined();
+
+    await act(async () => {
+      root?.render(createElement(MioCompanion, {
+        channel: general!,
+        mode: 'disconnected',
+      }));
+    });
+
+    expect(container.textContent).toContain('Beeper first. Then snacks.');
+    const mio = container.querySelector<HTMLButtonElement>('.mio-companion__button');
+    expect(mio?.getAttribute('aria-expanded')).toBe('true');
+
+    await act(async () => {
+      mio?.click();
+    });
+
+    expect(container.textContent).toContain('I’ll hold the door.');
   });
 });
 

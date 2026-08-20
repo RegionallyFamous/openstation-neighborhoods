@@ -161,6 +161,31 @@ a {
   backdrop-filter: blur(2px);
 }
 
+.session-restore {
+  position: fixed;
+  z-index: 85;
+  top: 18px;
+  left: 50%;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 220px;
+  padding: 10px 13px;
+  border: 1px solid rgba(154, 242, 255, 0.24);
+  border-radius: 12px;
+  color: var(--sirius);
+  pointer-events: none;
+  background: rgba(18, 15, 28, 0.94);
+  box-shadow: 0 16px 42px rgba(5, 3, 18, 0.38), 0 0 24px rgba(154, 242, 255, 0.05);
+  backdrop-filter: blur(14px);
+  transform: translateX(-50%);
+  animation: status-in 240ms var(--ease-out) both;
+}
+
+.session-restore > span { display: flex; flex-direction: column; gap: 2px; }
+.session-restore strong { font-size: 12px; color: var(--ink); }
+.session-restore small { font-size: 10px; color: var(--ink-faint); }
+
 @media (min-width: 1181px) {
   .neighborhoods-shell.members-closed {
     grid-template-columns: 276px minmax(410px, 1fr) 0;
@@ -680,17 +705,72 @@ a {
   animation: beacon-breathe 2.8s ease-in-out infinite;
 }
 
-.channel-welcome__station {
+.mio-companion {
   position: relative;
   z-index: 2;
   display: grid;
   place-items: center;
-  filter: drop-shadow(0 9px 14px rgba(8, 5, 26, 0.45));
-  rotate: -2deg;
-  animation: station-float 4.8s ease-in-out infinite;
+  width: 100%;
+  height: 100%;
 }
 
-.channel-welcome__station .openstation-mark { width: 76px; height: 76px; }
+.mio-companion__button {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  color: inherit;
+  cursor: pointer;
+  background: transparent;
+}
+
+.mio-companion__boop {
+  display: grid;
+  place-items: center;
+  animation: mio-boop 420ms var(--ease-spring) both;
+}
+
+.mio-companion__boop img {
+  display: block;
+  width: 112px;
+  height: 112px;
+  object-fit: contain;
+  filter: drop-shadow(0 9px 14px rgba(8, 5, 26, 0.52));
+  animation: mio-float 4.8s ease-in-out infinite;
+  transition: filter 180ms ease;
+}
+
+.mio-companion__button:hover img { filter: drop-shadow(0 11px 17px rgba(8, 5, 26, 0.58)) brightness(1.12); }
+
+.mio-companion__bubble {
+  position: absolute;
+  z-index: 4;
+  top: -14px;
+  right: -7px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 148px;
+  padding: 7px 9px;
+  border: 1px solid rgba(154, 242, 255, 0.25);
+  border-radius: 10px 10px 3px 10px;
+  font-size: 10px;
+  line-height: 1.25;
+  color: #e7e3f2;
+  pointer-events: none;
+  background: rgba(15, 12, 27, 0.94);
+  box-shadow: 0 10px 24px rgba(5, 3, 18, 0.32), 0 0 18px rgba(154, 242, 255, 0.05);
+  animation: mio-bubble-in 240ms var(--ease-spring) both;
+}
+
+.mio-companion__bubble b {
+  font: 700 8px/1 'Geist Mono', ui-monospace, monospace;
+  letter-spacing: 0.12em;
+  color: var(--sirius);
+}
 
 .date-divider {
   display: flex;
@@ -1301,7 +1381,9 @@ a {
 @keyframes orbit-drift { from { transform: rotate(0deg) scale(0.98); } to { transform: rotate(16deg) scale(1.03); } }
 @keyframes orbit-drift-reverse { from { transform: rotate(0deg) scale(1.02); } to { transform: rotate(-13deg) scale(0.98); } }
 @keyframes beacon-breathe { 0%, 100% { opacity: 0.68; scale: 0.82; } 50% { opacity: 1; scale: 1.16; } }
-@keyframes station-float { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-4px) rotate(1deg); } }
+@keyframes mio-float { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-4px) rotate(1deg); } }
+@keyframes mio-boop { 0% { opacity: 0.6; transform: scale(0.82) rotate(-7deg); } 58% { transform: scale(1.08) rotate(3deg); } }
+@keyframes mio-bubble-in { from { opacity: 0; transform: translate(5px, 5px) scale(0.9); } }
 @keyframes status-in { from { opacity: 0; transform: translateY(4px); } }
 @keyframes status-pulse { 0%, 100% { opacity: 0.56; scale: 0.82; } 50% { opacity: 1; scale: 1.08; } }
 @keyframes arrival-pulse { 0% { opacity: 0; scale: 0.4; } 55% { scale: 1.45; } }
@@ -1376,7 +1458,8 @@ a {
   .channel-welcome__orbit--outer { width: 62px; height: 38px; }
   .channel-welcome__orbit--inner { width: 45px; height: 62px; }
   .channel-welcome__beacon { top: 9px; right: 10px; width: 6px; height: 6px; }
-  .channel-welcome__station .openstation-mark { width: 48px; height: 48px; }
+  .mio-companion__boop img { width: 64px; height: 64px; }
+  .mio-companion__bubble { top: auto; right: -5px; bottom: -15px; max-width: 126px; padding: 6px 8px; font-size: 9px; }
   .message-group { grid-template-columns: 34px minmax(0, 1fr); gap: 8px; }
   .message-avatar { width: 32px; height: 32px; border-radius: 10px; }
   .modal-backdrop { place-items: start center; padding: 0; }
@@ -1393,6 +1476,7 @@ a {
   .join-room-card { align-items: flex-start; margin-inline: 12px; }
   .join-room-card { flex-wrap: wrap; }
   .join-room-card > button { width: 100%; min-height: 44px; }
+  .session-restore { top: 10px; width: calc(100% - 24px); }
 }
 
 @media (prefers-reduced-motion: reduce) {

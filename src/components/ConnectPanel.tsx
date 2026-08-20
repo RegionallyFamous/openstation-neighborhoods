@@ -200,7 +200,7 @@ export function ConnectPanel({
             <span><Check size={23} /></span>
             <div>
               <h2>You made it.</h2>
-              <p>Beeper has the door open on this computer.</p>
+              <p>This tab remembers you until it closes or Beeper restarts.</p>
             </div>
             <button type="button" onClick={onDisconnect}>DISCONNECT</button>
           </div>
@@ -237,7 +237,7 @@ export function ConnectPanel({
 
             <p className="connection-local-note">
               <ShieldCheck size={15} aria-hidden="true" />
-              Your Beeper key stays right here on this computer.
+              Your Beeper key stays in this tab. Refreshing is fine; closing it asks again.
             </p>
 
             {connection.kind === 'unavailable' && (
