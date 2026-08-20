@@ -16,7 +16,7 @@
     "preview": "vite preview",
     "deploy:spacefast": "npm run deploy:preview",
     "deploy:preview": "npm run check && spacefast publish ./dist --team openstation --space openstation-chat --spa true --target preview --wait --source-type git",
-    "release:promote": "spacefast rollback \"${SPACEFAST_VERSION:?Set SPACEFAST_VERSION to an approved preview version}\" --team openstation --space openstation-chat --channel live --wait",
+    "release:promote": "spacefast rollback \"${SPACEFAST_VERSION:?Set SPACEFAST_VERSION to an approved preview version}\" --team openstation --space openstation-chat --channel live --wait --yes",
     "release:versions": "spacefast versions ls --team openstation --space openstation-chat",
     "test": "vitest run",
     "test:watch": "vitest",
