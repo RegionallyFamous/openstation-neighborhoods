@@ -62,7 +62,7 @@ export interface NeighborhoodsController {
   loadOlderMessages: () => Promise<void>;
   resolveAttachment: (attachment: MessageAttachment) => Promise<string>;
   setReadEligible: (eligible: boolean) => void;
-  probeBeeper: () => Promise<void>;
+  probeBeeper: () => Promise<boolean>;
   connectWithOAuth: (joinConsentAccepted: boolean) => Promise<void>;
   disconnect: () => void;
 }
@@ -809,11 +809,13 @@ export function useNeighborhoods(): NeighborhoodsController {
         kind: 'available',
         message: `${info.app.name} ${info.app.version} is ready on this computer`,
       });
+      return true;
     } catch {
       setConnection({
         kind: 'unavailable',
-        message: 'Beeper Desktop API is not running on this computer',
+        message: 'Beeper was not found on this computer',
       });
+      return false;
     }
   }, []);
 

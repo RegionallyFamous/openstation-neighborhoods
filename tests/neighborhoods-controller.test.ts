@@ -192,7 +192,7 @@ describe('ConnectPanel recovery controls', () => {
           mode: 'disconnected',
           busy: false,
           onClose: vi.fn(),
-          onProbe: vi.fn().mockResolvedValue(undefined),
+          onProbe: vi.fn().mockResolvedValue(true),
           onOAuth,
           onDisconnect: vi.fn(),
         }),
@@ -216,6 +216,87 @@ describe('ConnectPanel recovery controls', () => {
     });
     expect(onOAuth).toHaveBeenCalledOnce();
     expect(onOAuth).toHaveBeenCalledWith(true);
+  });
+
+  it('checks for Beeper and starts approval from one connect action', async () => {
+    const onProbe = vi.fn().mockResolvedValue(true);
+    const onOAuth = vi.fn().mockResolvedValue(undefined);
+
+    await act(async () => {
+      root?.render(
+        createElement(ConnectPanel, {
+          open: true,
+          connection: {
+            kind: 'disconnected',
+            message: 'Open Beeper on this computer to get started.',
+          },
+          mode: 'disconnected',
+          busy: false,
+          onClose: vi.fn(),
+          onProbe,
+          onOAuth,
+          onDisconnect: vi.fn(),
+        }),
+      );
+    });
+
+    const connectButton = container.querySelector<HTMLButtonElement>(
+      'button.connect-primary',
+    );
+    const consent = container.querySelector<HTMLInputElement>('.join-consent input');
+
+    await act(async () => {
+      consent?.click();
+      connectButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onProbe).toHaveBeenCalledOnce();
+    expect(onOAuth).toHaveBeenCalledOnce();
+    expect(onOAuth).toHaveBeenCalledWith(true);
+  });
+
+  it('shows API troubleshooting only after Beeper cannot be found', async () => {
+    await act(async () => {
+      root?.render(
+        createElement(ConnectPanel, {
+          open: true,
+          connection: {
+            kind: 'disconnected',
+            message: 'Open Beeper on this computer to get started.',
+          },
+          mode: 'disconnected',
+          busy: false,
+          onClose: vi.fn(),
+          onProbe: vi.fn().mockResolvedValue(false),
+          onOAuth: vi.fn().mockResolvedValue(undefined),
+          onDisconnect: vi.fn(),
+        }),
+      );
+    });
+
+    expect(container.querySelector('.connect-troubleshooting')).toBeNull();
+    expect(container.textContent).not.toContain('Desktop API is normally ready');
+
+    await act(async () => {
+      root?.render(
+        createElement(ConnectPanel, {
+          open: true,
+          connection: {
+            kind: 'unavailable',
+            message: 'Beeper was not found on this computer',
+          },
+          mode: 'disconnected',
+          busy: false,
+          onClose: vi.fn(),
+          onProbe: vi.fn().mockResolvedValue(false),
+          onOAuth: vi.fn().mockResolvedValue(undefined),
+          onDisconnect: vi.fn(),
+        }),
+      );
+    });
+
+    expect(container.querySelector('.connect-troubleshooting')).not.toBeNull();
+    expect(container.textContent).toContain('Desktop API is normally ready');
   });
 });
 
