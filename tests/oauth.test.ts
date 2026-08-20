@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   completeBeeperOAuthCallback,
   createCodeChallenge,
+  disconnectBeeper,
   getStoredAccessToken,
   hasStoredBeeperSession,
   introspectBeeperAccessToken,
@@ -32,6 +33,8 @@ describe('Beeper OAuth PKCE', () => {
       value: storage,
     });
     vi.stubGlobal('localStorage', storage);
+    disconnectBeeper();
+    window.history.replaceState({}, '', '/');
   });
 
   it('creates the RFC 7636 S256 challenge', async () => {
@@ -93,6 +96,58 @@ describe('Beeper OAuth PKCE', () => {
 
     expect(hasStoredBeeperSession()).toBe(true);
     expect(getStoredAccessToken()).toBe('still-active-token');
+  });
+
+  it('keeps OAuth approval session-only by default', async () => {
+    storePendingOAuthState();
+    window.history.replaceState({}, '', '/?code=approved-code&state=verified-state');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(tokenResponse('session-token')));
+
+    await expect(completeBeeperOAuthCallback()).resolves.toBe('session-token');
+
+    expect(sessionStorage.getItem('openstation-neighborhoods:access-token')).toBe('session-token');
+    expect(localStorage.getItem('openstation-neighborhoods:access-token')).toBeNull();
+    expect(localStorage.getItem('openstation-neighborhoods:remember-beeper')).toBeNull();
+  });
+
+  it('restores an explicitly remembered approval after tab storage is cleared', async () => {
+    localStorage.setItem('openstation-neighborhoods:remember-beeper', 'true');
+    storePendingOAuthState();
+    window.history.replaceState({}, '', '/?code=approved-code&state=verified-state');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(tokenResponse('remembered-token')));
+
+    await expect(completeBeeperOAuthCallback()).resolves.toBe('remembered-token');
+    expect(sessionStorage.getItem('openstation-neighborhoods:access-token')).toBeNull();
+    expect(localStorage.getItem('openstation-neighborhoods:access-token')).toBe('remembered-token');
+
+    sessionStorage.clear();
+    expect(hasStoredBeeperSession()).toBe(true);
+    expect(getStoredAccessToken()).toBe('remembered-token');
+  });
+
+  it('clears an expired remembered approval and its remember setting', () => {
+    localStorage.setItem('openstation-neighborhoods:remember-beeper', 'true');
+    localStorage.setItem('openstation-neighborhoods:access-token', 'expired-remembered-token');
+    localStorage.setItem(
+      'openstation-neighborhoods:access-token-expires',
+      String(Date.now() - 1_000),
+    );
+
+    expect(getStoredAccessToken()).toBeNull();
+    expect(localStorage.getItem('openstation-neighborhoods:access-token')).toBeNull();
+    expect(localStorage.getItem('openstation-neighborhoods:remember-beeper')).toBeNull();
+  });
+
+  it('disconnects and forgets both session and persistent approvals', () => {
+    sessionStorage.setItem('openstation-neighborhoods:access-token', 'session-token');
+    localStorage.setItem('openstation-neighborhoods:remember-beeper', 'true');
+    localStorage.setItem('openstation-neighborhoods:access-token', 'remembered-token');
+
+    disconnectBeeper();
+
+    expect(sessionStorage.getItem('openstation-neighborhoods:access-token')).toBeNull();
+    expect(localStorage.getItem('openstation-neighborhoods:access-token')).toBeNull();
+    expect(localStorage.getItem('openstation-neighborhoods:remember-beeper')).toBeNull();
   });
 
   it('introspects an access token using Beeper OAuth metadata', async () => {
@@ -159,3 +214,27 @@ describe('Beeper OAuth PKCE', () => {
     );
   });
 });
+
+function storePendingOAuthState(): void {
+  sessionStorage.setItem(
+    'openstation-neighborhoods:oauth-state',
+    JSON.stringify({
+      state: 'verified-state',
+      verifier: 'test-verifier',
+      clientID: 'test-client',
+      tokenEndpoint: 'http://127.0.0.1:23373/oauth/token',
+      redirectURI: `${window.location.origin}/`,
+    }),
+  );
+}
+
+function tokenResponse(accessToken: string): Response {
+  return new Response(JSON.stringify({
+    access_token: accessToken,
+    token_type: 'Bearer',
+    expires_in: 3_600,
+  }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}

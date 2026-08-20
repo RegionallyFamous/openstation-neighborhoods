@@ -11,8 +11,8 @@ interface ConnectPanelProps {
   busy: boolean;
   onClose: () => void;
   onProbe: () => Promise<boolean>;
-  onOAuth: (joinConsentAccepted: boolean) => Promise<void>;
-  onRetry: (joinConsentAccepted: boolean) => Promise<void>;
+  onOAuth: (joinConsentAccepted: boolean, rememberOnComputer: boolean) => Promise<void>;
+  onRetry: (joinConsentAccepted: boolean, rememberOnComputer: boolean) => Promise<void>;
   onDisconnect: () => void;
 }
 
@@ -29,6 +29,7 @@ export function ConnectPanel({
 }: ConnectPanelProps) {
   const [localError, setLocalError] = useState('');
   const [joinConsent, setJoinConsent] = useState(false);
+  const [rememberOnComputer, setRememberOnComputer] = useState(false);
   const [slowConnection, setSlowConnection] = useState(false);
   const dialogRef = useRef<HTMLElement>(null);
   const actionRunningRef = useRef(false);
@@ -120,11 +121,11 @@ export function ConnectPanel({
         connection.problem &&
         connection.problem?.action !== 'reauthorize'
       ) {
-        await onRetry(joinConsent);
+        await onRetry(joinConsent, rememberOnComputer);
         return;
       }
       if (shouldProbe && !(await onProbe())) return;
-      await onOAuth(joinConsent);
+      await onOAuth(joinConsent, rememberOnComputer);
     } catch (error) {
       setLocalError(error instanceof Error ? error.message : 'The door did not open. Try once more.');
     } finally {
@@ -227,7 +228,7 @@ export function ConnectPanel({
               {connection.kind === 'connected' && connection.health === 'reconnecting' && (
                 <button type="button" onClick={() => {
                   setLocalError('');
-                  void onRetry(false).catch((error) => {
+                  void onRetry(false, rememberOnComputer).catch((error) => {
                     setLocalError(error instanceof Error ? error.message : 'Beeper is still reconnecting.');
                   });
                 }}>TRY NOW</button>
@@ -246,6 +247,18 @@ export function ConnectPanel({
               <span>
                 <strong>Count me in — join six public rooms</strong>
                 <small>Shared history is visible. Rooms are not end-to-end encrypted, and copies may remain with participating services.</small>
+              </span>
+            </label>
+
+            <label className="remember-session">
+              <input
+                type="checkbox"
+                checked={rememberOnComputer}
+                onChange={(event) => setRememberOnComputer(event.target.checked)}
+              />
+              <span>
+                <strong>Remember me on this computer</strong>
+                <small>Skip approval after closing this tab. Use only on a private computer.</small>
               </span>
             </label>
 
@@ -268,7 +281,9 @@ export function ConnectPanel({
 
             <p className="connection-local-note">
               <ShieldCheck size={15} aria-hidden="true" />
-              Your Beeper key stays in this tab. Refreshing is fine; closing it asks again.
+              {rememberOnComputer
+                ? 'This computer remembers your Beeper approval until you disconnect or it expires.'
+                : 'Session-only: refreshing is fine; closing this tab asks again.'}
             </p>
 
             {(connection.kind === 'unavailable' || problem?.troubleshooting) && (

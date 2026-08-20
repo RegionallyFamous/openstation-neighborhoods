@@ -14,6 +14,7 @@ All notable changes to OpenStation Neighborhoods are recorded here. The project 
 - OAuth token introspection at connection time and grant revocation on explicit disconnect.
 - Explicit public-room consent, current-version checks, and a gesture-first local-network connection flow.
 - Accessible small-screen room navigation and keyboard-scrollable conversation regions.
+- An optional “Remember me on this computer” approval that survives tab closure while session-only storage remains the default.
 
 ### Changed
 

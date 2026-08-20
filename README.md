@@ -59,7 +59,7 @@ npm run check
 3. Open the connection panel in Neighborhoods.
 4. Accept the public-room notice, choose **Join OpenStation**, and approve the local read/write request Beeper shows.
 
-OAuth access tokens are stored in `sessionStorage`, introspected before a live session starts, and revoked through Beeper when a user explicitly disconnects. Closing the browser session clears the local token. A stale or revoked token returns the app to a reconnectable authorization state. Neighborhoods never asks Beeper to listen beyond the loopback interface.
+OAuth access tokens are stored in `sessionStorage` by default and are introspected before a live session starts. A clearly labeled, opt-in **Remember me on this computer** setting stores the approval in `localStorage` so it can survive closing the tab; it should be used only on a private computer. Disconnecting, expiry, or invalid authorization clears both storage locations, and explicit disconnect also asks Beeper to revoke the grant. Neighborhoods never asks Beeper to listen beyond the loopback interface.
 
 Do not commit tokens to this repository or put them in Vite environment variables.
 

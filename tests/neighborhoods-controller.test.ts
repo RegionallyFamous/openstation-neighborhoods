@@ -423,7 +423,7 @@ describe('ConnectPanel recovery controls', () => {
       connectButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(onOAuth).toHaveBeenCalledOnce();
-    expect(onOAuth).toHaveBeenCalledWith(true);
+    expect(onOAuth).toHaveBeenCalledWith(true, false);
   });
 
   it('retries a saved session instead of demanding another approval', async () => {
@@ -462,7 +462,7 @@ describe('ConnectPanel recovery controls', () => {
       button?.click();
     });
 
-    expect(onRetry).toHaveBeenCalledWith(false);
+    expect(onRetry).toHaveBeenCalledWith(false, false);
     expect(onOAuth).not.toHaveBeenCalled();
     expect(container.textContent).toContain('Beeper is taking too long');
   });
@@ -538,15 +538,20 @@ describe('ConnectPanel recovery controls', () => {
       'button.connect-primary',
     );
     const consent = container.querySelector<HTMLInputElement>('.join-consent input');
+    const remember = container.querySelector<HTMLInputElement>('.remember-session input');
+
+    expect(remember?.checked).toBe(false);
 
     await act(async () => {
       consent?.click();
+      remember?.click();
       connectButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     expect(onProbe).toHaveBeenCalledOnce();
     expect(onOAuth).toHaveBeenCalledOnce();
-    expect(onOAuth).toHaveBeenCalledWith(true);
+    expect(onOAuth).toHaveBeenCalledWith(true, true);
+    expect(container.textContent).toContain('This computer remembers your Beeper approval');
   });
 
   it('shows API troubleshooting only after Beeper cannot be found', async () => {

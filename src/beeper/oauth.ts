@@ -16,6 +16,7 @@ const OAUTH_CLIENT_KEY = 'openstation-neighborhoods:oauth-client';
 const ACCESS_TOKEN_KEY = 'openstation-neighborhoods:access-token';
 const ACCESS_TOKEN_SOURCE_KEY = 'openstation-neighborhoods:access-token-source';
 const ACCESS_TOKEN_EXPIRES_KEY = 'openstation-neighborhoods:access-token-expires';
+const REMEMBER_BEEPER_KEY = 'openstation-neighborhoods:remember-beeper';
 
 interface OAuthPendingState {
   state: string;
@@ -31,8 +32,15 @@ interface OAuthPendingState {
 let oauthCallbackCompletion: Promise<string | null> | null = null;
 
 export function getStoredAccessToken(): string | null {
-  const token = sessionStorage.getItem(ACCESS_TOKEN_KEY);
-  const expiresAt = Number(sessionStorage.getItem(ACCESS_TOKEN_EXPIRES_KEY));
+  const storage = sessionStorage.getItem(ACCESS_TOKEN_KEY)
+    ? sessionStorage
+    : isBeeperRemembered()
+      ? window.localStorage
+      : null;
+  if (!storage) return null;
+
+  const token = storage.getItem(ACCESS_TOKEN_KEY);
+  const expiresAt = Number(storage.getItem(ACCESS_TOKEN_EXPIRES_KEY));
   if (token && Number.isFinite(expiresAt) && expiresAt > 0 && expiresAt <= Date.now()) {
     disconnectBeeper();
     return null;
@@ -44,12 +52,16 @@ export function hasStoredBeeperSession(): boolean {
   return Boolean(getStoredAccessToken());
 }
 
+export function isBeeperRemembered(): boolean {
+  return window.localStorage.getItem(REMEMBER_BEEPER_KEY) === 'true';
+}
+
 export function disconnectBeeper(): void {
   oauthCallbackCompletion = null;
-  sessionStorage.removeItem(ACCESS_TOKEN_KEY);
-  sessionStorage.removeItem(ACCESS_TOKEN_SOURCE_KEY);
-  sessionStorage.removeItem(ACCESS_TOKEN_EXPIRES_KEY);
+  clearAccessToken(sessionStorage);
+  clearAccessToken(window.localStorage);
   sessionStorage.removeItem(OAUTH_STATE_KEY);
+  window.localStorage.removeItem(REMEMBER_BEEPER_KEY);
 }
 
 export function invalidateBeeperAuthorization(): void {
@@ -58,8 +70,10 @@ export function invalidateBeeperAuthorization(): void {
 }
 
 export async function beginBeeperOAuth(
+  rememberOnComputer = false,
   baseUrl = DEFAULT_BEEPER_API_BASE,
 ): Promise<void> {
+  setRememberBeeperPreference(rememberOnComputer);
   assertTrustedApplicationOrigin();
   const client = new BeeperClient({ baseUrl });
   const info = await client.getInfo();
@@ -198,17 +212,39 @@ async function exchangeOAuthCallback(currentURL: URL): Promise<string> {
     throw new Error('Beeper returned an invalid access-token lifetime.');
   }
 
-  sessionStorage.setItem(ACCESS_TOKEN_KEY, token.access_token);
-  if (token.expires_in) {
-    sessionStorage.setItem(
-      ACCESS_TOKEN_EXPIRES_KEY,
-      String(Date.now() + token.expires_in * 1_000),
-    );
-  } else {
-    sessionStorage.removeItem(ACCESS_TOKEN_EXPIRES_KEY);
-  }
+  storeAccessToken(
+    token.access_token,
+    token.expires_in ? Date.now() + token.expires_in * 1_000 : null,
+  );
   sessionStorage.removeItem(OAUTH_STATE_KEY);
   return token.access_token;
+}
+
+function setRememberBeeperPreference(rememberOnComputer: boolean): void {
+  if (rememberOnComputer) {
+    window.localStorage.setItem(REMEMBER_BEEPER_KEY, 'true');
+    return;
+  }
+  window.localStorage.removeItem(REMEMBER_BEEPER_KEY);
+  clearAccessToken(window.localStorage);
+}
+
+function storeAccessToken(token: string, expiresAt: number | null): void {
+  const storage = isBeeperRemembered() ? window.localStorage : sessionStorage;
+  const otherStorage = storage === sessionStorage ? window.localStorage : sessionStorage;
+  clearAccessToken(otherStorage);
+  storage.setItem(ACCESS_TOKEN_KEY, token);
+  if (expiresAt) {
+    storage.setItem(ACCESS_TOKEN_EXPIRES_KEY, String(expiresAt));
+  } else {
+    storage.removeItem(ACCESS_TOKEN_EXPIRES_KEY);
+  }
+}
+
+function clearAccessToken(storage: Storage): void {
+  storage.removeItem(ACCESS_TOKEN_KEY);
+  storage.removeItem(ACCESS_TOKEN_SOURCE_KEY);
+  storage.removeItem(ACCESS_TOKEN_EXPIRES_KEY);
 }
 
 export async function introspectBeeperAccessToken(

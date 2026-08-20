@@ -68,11 +68,11 @@ export interface NeighborhoodsController {
   loadOlderMessages: () => Promise<void>;
   retryRoom: (channelId: string) => Promise<void>;
   retrySync: () => void;
-  retryConnection: (joinConsentAccepted: boolean) => Promise<void>;
+  retryConnection: (joinConsentAccepted: boolean, rememberOnComputer: boolean) => Promise<void>;
   resolveAttachment: (attachment: MessageAttachment) => Promise<string>;
   setReadEligible: (eligible: boolean) => void;
   probeBeeper: () => Promise<boolean>;
-  connectWithOAuth: (joinConsentAccepted: boolean) => Promise<void>;
+  connectWithOAuth: (joinConsentAccepted: boolean, rememberOnComputer: boolean) => Promise<void>;
   disconnect: () => void;
 }
 
@@ -1053,7 +1053,10 @@ export function useNeighborhoods(): NeighborhoodsController {
     }
   }, []);
 
-  const connectWithOAuth = useCallback(async (joinConsentAccepted: boolean) => {
+  const connectWithOAuth = useCallback(async (
+    joinConsentAccepted: boolean,
+    rememberOnComputer: boolean,
+  ) => {
     if (!joinConsentAccepted) {
       throw new Error('Tick the public-room box first, then we can open the door.');
     }
@@ -1062,7 +1065,7 @@ export function useNeighborhoods(): NeighborhoodsController {
     setIsBusy(true);
     setConnection({ kind: 'authorizing', message: 'Beeper has the invite. Waiting for your okay…' });
     try {
-      await beginBeeperOAuth();
+      await beginBeeperOAuth(rememberOnComputer);
       window.setTimeout(() => {
         if (busyOperationRef.current !== busyOperation) return;
         busyOperationRef.current += 1;
@@ -1093,14 +1096,17 @@ export function useNeighborhoods(): NeighborhoodsController {
     }
   }, []);
 
-  const retryConnection = useCallback(async (joinConsentAccepted: boolean) => {
+  const retryConnection = useCallback(async (
+    joinConsentAccepted: boolean,
+    rememberOnComputer: boolean,
+  ) => {
     const token = getStoredAccessToken();
     if (token) {
       await loadBeeper(token, false);
       return;
     }
     if (!(await probeBeeper())) return;
-    await connectWithOAuth(joinConsentAccepted);
+    await connectWithOAuth(joinConsentAccepted, rememberOnComputer);
   }, [connectWithOAuth, loadBeeper, probeBeeper]);
 
   const resetConnection = useCallback(() => {
