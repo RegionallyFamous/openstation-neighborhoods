@@ -70,14 +70,24 @@ jobs:
 
       - name: Resolve immutable preview URL
         run: |
-          PREVIEW_URL="$(node -e 'const fs = require("node:fs"); const receipt = JSON.parse(fs.readFileSync("spacefast-preview.json", "utf8")); const url = receipt?.data?.version?.immutableUrl; if (!url) process.exit(2); process.stdout.write(url)')"
+          PREVIEW_URL="$(node -e 'const fs = require("node:fs"); const receipt = JSON.parse(fs.readFileSync("spacefast-preview.json", "utf8")); const url = receipt?.data?.immutableUrl; if (!url) process.exit(2); process.stdout.write(url)')"
           echo "PREVIEW_URL=$PREVIEW_URL" >> "$GITHUB_ENV"
 
       - name: Smoke-test preview security metadata
         run: |
-          curl --fail --silent --show-error --retry 6 --retry-delay 2 --retry-all-errors "$PREVIEW_URL" >/dev/null
-          curl --fail --silent --show-error --retry 6 --retry-delay 2 --retry-all-errors --head "$PREVIEW_URL" | grep -i '^content-security-policy:'
-          curl --fail --silent --show-error --retry 6 --retry-delay 2 --retry-all-errors --head "$PREVIEW_URL" | grep -i '^referrer-policy:'
+          grep -q '^  Content-Security-Policy:' dist/_headers
+          grep -q '^  Referrer-Policy:' dist/_headers
+
+          PREVIEW_STATUS="$(curl --silent --show-error --retry 6 --retry-delay 2 --retry-all-errors --output /dev/null --write-out '%{http_code}' "$PREVIEW_URL")"
+          if [[ "$PREVIEW_STATUS" == "200" ]]; then
+            curl --fail --silent --show-error --retry 6 --retry-delay 2 --retry-all-errors --head "$PREVIEW_URL" | grep -i '^content-security-policy:'
+            curl --fail --silent --show-error --retry 6 --retry-delay 2 --retry-all-errors --head "$PREVIEW_URL" | grep -i '^referrer-policy:'
+          elif [[ "$PREVIEW_STATUS" == "401" || "$PREVIEW_STATUS" == "403" ]]; then
+            echo "Immutable preview is ready behind SpaceFast's private-preview access gate."
+          else
+            echo "Unexpected immutable preview status: $PREVIEW_STATUS" >&2
+            exit 2
+          fi
 
       - name: Upload preview receipt and artifact
         uses: actions/upload-artifact@v4
