@@ -2,6 +2,11 @@ name: Publish release preview
 
 on:
   workflow_dispatch:
+    inputs:
+      revision:
+        description: Annotated release tag or full commit SHA to publish
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -21,6 +26,12 @@ jobs:
     steps:
       - name: Check out selected revision
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.revision }}
+
+      - name: Resolve selected revision
+        id: revision
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -38,25 +49,28 @@ jobs:
         run: npm run check
 
       - name: Publish immutable preview
+        env:
+          RELEASE_REF: ${{ inputs.revision }}
+          RELEASE_SHA: ${{ steps.revision.outputs.sha }}
         run: |
+          set -o pipefail
           npm exec -- sf publish ./dist \
             --team openstation \
             --space openstation-chat \
             --spa true \
-            --no-compress \
             --target preview \
             --wait \
             --source-type git \
-            --git-branch "$GITHUB_REF_NAME" \
-            --git-commit "$GITHUB_SHA" \
-            --git-ref "$GITHUB_REF" \
+            --git-branch "$RELEASE_REF" \
+            --git-commit "$RELEASE_SHA" \
+            --git-ref "$RELEASE_REF" \
             --git-repository "$GITHUB_REPOSITORY" \
-            --message "Release preview for $GITHUB_SHA" \
-            --json | tee spacefast-preview.json
+            --message "Release preview for $RELEASE_SHA" \
+            --json 2>&1 | tee spacefast-preview.json
 
       - name: Resolve immutable preview URL
         run: |
-          PREVIEW_URL="$(node -e 'const fs = require("node:fs"); const receipt = JSON.parse(fs.readFileSync("spacefast-preview.json", "utf8")); const url = receipt?.data?.immutableUrl; if (!url) process.exit(2); process.stdout.write(url)')"
+          PREVIEW_URL="$(node -e 'const fs = require("node:fs"); const receipt = JSON.parse(fs.readFileSync("spacefast-preview.json", "utf8")); const url = receipt?.data?.version?.immutableUrl; if (!url) process.exit(2); process.stdout.write(url)')"
           echo "PREVIEW_URL=$PREVIEW_URL" >> "$GITHUB_ENV"
 
       - name: Smoke-test preview security metadata
@@ -68,7 +82,7 @@ jobs:
       - name: Upload preview receipt and artifact
         uses: actions/upload-artifact@v4
         with:
-          name: openstation-preview-${{ github.sha }}
+          name: openstation-preview-${{ steps.revision.outputs.sha }}
           path: |
             dist/
             spacefast-preview.json

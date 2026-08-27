@@ -25,7 +25,7 @@ This process turns a reviewed Git revision into a traceable OpenStation Neighbor
    ```
 
 5. Commit the version and changelog. Create an annotated tag such as `v0.2.0-rc.1` only after CI passes.
-6. Run **Publish release preview** from that tag or commit.
+6. Run **Publish release preview** from `main`, entering that annotated tag or full commit SHA as the `revision` input. The workflow checks out and records the selected revision rather than rebuilding `main` implicitly.
 7. Save the workflow artifact containing `dist/` and `spacefast-preview.json`.
 
 ## Preview qualification

@@ -47,12 +47,13 @@ jobs:
 
       - name: Promote the tested version without rebuilding
         run: |
+          set -o pipefail
           npm exec -- sf rollback "$SPACEFAST_VERSION" \
             --team openstation \
             --space openstation-chat \
             --channel live \
             --wait \
-            --json | tee spacefast-production.json
+            --json 2>&1 | tee spacefast-production.json
 
       - name: Smoke-test production metadata
         run: |
@@ -68,4 +69,3 @@ jobs:
           path: spacefast-production.json
           if-no-files-found: error
           retention-days: 365
-

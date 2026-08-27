@@ -14,7 +14,7 @@ The compatible local command publishes a preview and waits for it to become read
 npm run deploy:spacefast
 ```
 
-`deploy:spacefast` intentionally aliases `deploy:preview`; it does not change live traffic. The preferred release path is the **Publish release preview** GitHub Actions workflow because it records the Git repository, commit, branch, ref, SpaceFast version, and deployment receipt.
+`deploy:spacefast` intentionally aliases `deploy:preview`; it does not change live traffic. The preferred release path is the **Publish release preview** GitHub Actions workflow. Run the workflow from `main` and provide an annotated tag or full commit SHA in its `revision` input; it checks out that revision and records the Git repository, commit, selected ref, SpaceFast version, and deployment receipt.
 
 The preview workflow requires a `SPACEFAST_TOKEN` secret in a GitHub environment named `preview`. Give the token only the access required to publish to the OpenStation team's `openstation-chat` space.
 
