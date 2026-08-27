@@ -241,7 +241,7 @@ describe('Neighborhoods connection controller', () => {
       mode: 'disconnected',
       connection: {
         kind: 'error',
-        message: expect.stringContaining('approval expired'),
+        message: expect.stringContaining('pass expired'),
         problem: {
           code: 'authorization-expired',
           action: 'reauthorize',
@@ -255,9 +255,11 @@ describe('Neighborhoods connection controller', () => {
     expect(sessionStorage.getItem(OAUTH_STATE_KEY)).toBeNull();
     expect(localStorage.getItem(OAUTH_CLIENT_KEY)).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    const [introspectionInput, introspectionInit] = fetchMock.mock.calls[1];
-    expect(String(introspectionInput)).toContain('/oauth/introspect');
-    expect(String(introspectionInit?.body)).toContain('token=stale-synthetic-token');
+    const [accountsInput, accountsInit] = fetchMock.mock.calls[1];
+    expect(String(accountsInput)).toContain('/v1/accounts');
+    expect(new Headers(accountsInit?.headers).get('Authorization')).toBe(
+      'Bearer stale-synthetic-token',
+    );
   });
 });
 
@@ -357,7 +359,7 @@ describe('Room recovery surface', () => {
 });
 
 describe('ConnectPanel recovery controls', () => {
-  it('shows concrete progress while Beeper approval is opening', async () => {
+  it('shows concrete progress while Beeper is checking the token', async () => {
     await act(async () => {
       root?.render(
         createElement(ConnectPanel, {
@@ -370,7 +372,7 @@ describe('ConnectPanel recovery controls', () => {
           busy: true,
           onClose: vi.fn(),
           onProbe: vi.fn().mockResolvedValue(true),
-          onOAuth: vi.fn().mockResolvedValue(undefined),
+          onToken: vi.fn().mockResolvedValue(undefined),
           onRetry: vi.fn().mockResolvedValue(undefined),
           onDisconnect: vi.fn(),
         }),
@@ -380,13 +382,13 @@ describe('ConnectPanel recovery controls', () => {
     expect(container.querySelector('.connect-progress')).not.toBeNull();
     expect(container.textContent).toContain('Passing the invite to Beeper…');
     expect(container.textContent).toContain('Find Beeper');
-    expect(container.textContent).toContain('Pass the invite');
+    expect(container.textContent).toContain('Check the pass');
     expect(container.textContent).toContain('Step inside');
     expect(container.querySelector<HTMLButtonElement>('.connect-primary')?.disabled).toBe(true);
   });
 
-  it('keeps the primary OAuth action usable after a connection error', async () => {
-    const onOAuth = vi.fn().mockResolvedValue(undefined);
+  it('keeps the token action usable after a connection error', async () => {
+    const onToken = vi.fn().mockResolvedValue(undefined);
 
     await act(async () => {
       root?.render(
@@ -400,7 +402,7 @@ describe('ConnectPanel recovery controls', () => {
           busy: false,
           onClose: vi.fn(),
           onProbe: vi.fn().mockResolvedValue(true),
-          onOAuth,
+          onToken,
           onRetry: vi.fn().mockResolvedValue(undefined),
           onDisconnect: vi.fn(),
         }),
@@ -411,24 +413,28 @@ describe('ConnectPanel recovery controls', () => {
       'button.connect-primary',
     );
     const consent = container.querySelector<HTMLInputElement>('.join-consent input');
+    const token = container.querySelector<HTMLInputElement>('#beeper-access-token');
     expect(connectButton).not.toBeNull();
     expect(connectButton?.disabled).toBe(true);
 
     await act(async () => {
       consent?.click();
+      if (token) {
+        setInputValue(token, 'fresh-beeper-token');
+      }
     });
     expect(connectButton?.disabled).toBe(false);
 
     await act(async () => {
       connectButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(onOAuth).toHaveBeenCalledOnce();
-    expect(onOAuth).toHaveBeenCalledWith(true, false);
+    expect(onToken).toHaveBeenCalledOnce();
+    expect(onToken).toHaveBeenCalledWith('fresh-beeper-token', true, false);
   });
 
   it('retries a saved session instead of demanding another approval', async () => {
     const onRetry = vi.fn().mockResolvedValue(undefined);
-    const onOAuth = vi.fn().mockResolvedValue(undefined);
+    const onToken = vi.fn().mockResolvedValue(undefined);
 
     await act(async () => {
       root?.render(
@@ -449,7 +455,7 @@ describe('ConnectPanel recovery controls', () => {
           busy: false,
           onClose: vi.fn(),
           onProbe: vi.fn().mockResolvedValue(true),
-          onOAuth,
+          onToken,
           onRetry,
           onDisconnect: vi.fn(),
         }),
@@ -463,7 +469,7 @@ describe('ConnectPanel recovery controls', () => {
     });
 
     expect(onRetry).toHaveBeenCalledWith(false, false);
-    expect(onOAuth).not.toHaveBeenCalled();
+    expect(onToken).not.toHaveBeenCalled();
     expect(container.textContent).toContain('Beeper is taking too long');
   });
 
@@ -491,7 +497,7 @@ describe('ConnectPanel recovery controls', () => {
         busy: false,
         onClose: vi.fn(),
         onProbe: vi.fn().mockResolvedValue(true),
-        onOAuth: vi.fn().mockResolvedValue(undefined),
+        onToken: vi.fn().mockResolvedValue(undefined),
         onRetry,
         onDisconnect: vi.fn(),
       }));
@@ -511,9 +517,9 @@ describe('ConnectPanel recovery controls', () => {
     });
   });
 
-  it('checks for Beeper and starts approval from one connect action', async () => {
+  it('checks for Beeper and connects with a pasted token from one action', async () => {
     const onProbe = vi.fn().mockResolvedValue(true);
-    const onOAuth = vi.fn().mockResolvedValue(undefined);
+    const onToken = vi.fn().mockResolvedValue(undefined);
 
     await act(async () => {
       root?.render(
@@ -527,7 +533,7 @@ describe('ConnectPanel recovery controls', () => {
           busy: false,
           onClose: vi.fn(),
           onProbe,
-          onOAuth,
+          onToken,
           onRetry: vi.fn().mockResolvedValue(undefined),
           onDisconnect: vi.fn(),
         }),
@@ -539,19 +545,23 @@ describe('ConnectPanel recovery controls', () => {
     );
     const consent = container.querySelector<HTMLInputElement>('.join-consent input');
     const remember = container.querySelector<HTMLInputElement>('.remember-session input');
+    const token = container.querySelector<HTMLInputElement>('#beeper-access-token');
 
     expect(remember?.checked).toBe(false);
 
     await act(async () => {
       consent?.click();
       remember?.click();
+      if (token) {
+        setInputValue(token, 'manual-beeper-token');
+      }
       connectButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     expect(onProbe).toHaveBeenCalledOnce();
-    expect(onOAuth).toHaveBeenCalledOnce();
-    expect(onOAuth).toHaveBeenCalledWith(true, true);
-    expect(container.textContent).toContain('This computer remembers your Beeper approval');
+    expect(onToken).toHaveBeenCalledOnce();
+    expect(onToken).toHaveBeenCalledWith('manual-beeper-token', true, true);
+    expect(container.textContent).toContain('This browser remembers the pass');
   });
 
   it('shows API troubleshooting only after Beeper cannot be found', async () => {
@@ -567,7 +577,7 @@ describe('ConnectPanel recovery controls', () => {
           busy: false,
           onClose: vi.fn(),
           onProbe: vi.fn().mockResolvedValue(false),
-          onOAuth: vi.fn().mockResolvedValue(undefined),
+          onToken: vi.fn().mockResolvedValue(undefined),
           onRetry: vi.fn().mockResolvedValue(undefined),
           onDisconnect: vi.fn(),
         }),
@@ -589,7 +599,7 @@ describe('ConnectPanel recovery controls', () => {
           busy: false,
           onClose: vi.fn(),
           onProbe: vi.fn().mockResolvedValue(false),
-          onOAuth: vi.fn().mockResolvedValue(undefined),
+          onToken: vi.fn().mockResolvedValue(undefined),
           onRetry: vi.fn().mockResolvedValue(undefined),
           onDisconnect: vi.fn(),
         }),
@@ -627,6 +637,15 @@ function memoryStorage(): Storage {
       entries.set(key, value);
     },
   };
+}
+
+function setInputValue(input: HTMLInputElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    'value',
+  )?.set;
+  setter?.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 function jsonResponse(value: unknown): Response {

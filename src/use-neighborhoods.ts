@@ -6,13 +6,11 @@ import {
   classifyBeeperFailure,
 } from './beeper/failures';
 import {
-  beginBeeperOAuth,
   completeBeeperOAuthCallback,
   disconnectBeeper,
   getStoredAccessToken,
   invalidateBeeperAuthorization,
-  introspectBeeperAccessToken,
-  revokeBeeperAccessToken,
+  storeBeeperAccessToken,
 } from './beeper/oauth';
 import type {
   BeeperAccount,
@@ -72,7 +70,11 @@ export interface NeighborhoodsController {
   resolveAttachment: (attachment: MessageAttachment) => Promise<string>;
   setReadEligible: (eligible: boolean) => void;
   probeBeeper: () => Promise<boolean>;
-  connectWithOAuth: (joinConsentAccepted: boolean, rememberOnComputer: boolean) => Promise<void>;
+  connectWithToken: (
+    token: string,
+    joinConsentAccepted: boolean,
+    rememberOnComputer: boolean,
+  ) => Promise<void>;
   disconnect: () => void;
 }
 
@@ -97,9 +99,6 @@ export function useNeighborhoods(): NeighborhoodsController {
   const selfMemberRef = useRef<Member | null>(null);
   const memberStoreRef = useRef<Record<string, Member[]>>({});
   const messagePageStoreRef = useRef<Record<string, MessagePageState>>({});
-  const oauthEndpointsRef = useRef<{
-    revocation?: string;
-  }>({});
   const pollRef = useRef<number | null>(null);
   const pollAbortRef = useRef<AbortController | null>(null);
   const syncGenerationRef = useRef(0);
@@ -154,7 +153,6 @@ export function useNeighborhoods(): NeighborhoodsController {
     selfMemberRef.current = null;
     memberStoreRef.current = {};
     messagePageStoreRef.current = {};
-    oauthEndpointsRef.current = {};
     setMode('disconnected');
     const disconnectedChannels = flattenChannels();
     channelsRef.current = disconnectedChannels;
@@ -388,20 +386,8 @@ export function useNeighborhoods(): NeighborhoodsController {
       try {
         const info = await client.getInfo();
         assertSupportedBeeperInfo(info);
-        oauthEndpointsRef.current = {
-          revocation: info.endpoints.oauth?.revocation_endpoint,
-        };
-        const tokenActive = await introspectBeeperAccessToken(
-          token,
-          info.endpoints.oauth?.introspection_endpoint,
-        );
-        if (!tokenActive) {
-          throw new BeeperApiError('Beeper authorization is invalid or expired.', 401, 'unauthorized');
-        }
-        setConnection({ kind: 'authorizing', message: 'Pass is good. Gathering your rooms…' });
-        const accountsPromise = client.getAccounts();
-        const chatsPromise = getOpenStationChats(client);
-        const accounts = await accountsPromise;
+        setConnection({ kind: 'authorizing', message: 'Checking your pass and gathering your rooms…' });
+        const accounts = await client.getAccounts();
         const matrixAccount = findMatrixAccount(accounts);
         if (!matrixAccount) {
           throw new BeeperFlowError('matrix-account-missing');
@@ -415,6 +401,7 @@ export function useNeighborhoods(): NeighborhoodsController {
             matrixAccount.statusText || 'Open Beeper and resolve the account notice shown there, then check again.',
           );
         }
+        const chatsPromise = getOpenStationChats(client);
         const initialChats = await chatsPromise;
         setConnection({ kind: 'authorizing', message: 'Rooms found. Fluffing the cushions…' });
         const matrixIdentity: BeeperAccount = matrixAccount;
@@ -1053,7 +1040,8 @@ export function useNeighborhoods(): NeighborhoodsController {
     }
   }, []);
 
-  const connectWithOAuth = useCallback(async (
+  const connectWithToken = useCallback(async (
+    token: string,
     joinConsentAccepted: boolean,
     rememberOnComputer: boolean,
   ) => {
@@ -1061,44 +1049,17 @@ export function useNeighborhoods(): NeighborhoodsController {
       throw new Error('Tick the public-room box first, then we can open the door.');
     }
     window.localStorage.setItem(JOIN_CONSENT_KEY, JOIN_CONSENT_VERSION);
-    const busyOperation = ++busyOperationRef.current;
-    setIsBusy(true);
-    setConnection({ kind: 'authorizing', message: 'Beeper has the invite. Waiting for your okay…' });
-    try {
-      await beginBeeperOAuth(rememberOnComputer);
-      window.setTimeout(() => {
-        if (busyOperationRef.current !== busyOperation) return;
-        busyOperationRef.current += 1;
-        setIsBusy(false);
-        setConnection((current) => current.kind === 'authorizing'
-          ? {
-              kind: 'error',
-              message: 'The Beeper approval page did not open. Keep Beeper open and try the approval again.',
-              problem: {
-                code: 'authorization-window-missing',
-                title: 'The Beeper approval page did not open',
-                message: 'The Beeper approval page did not open. Keep Beeper open and try the approval again.',
-                action: 'reauthorize',
-                actionLabel: 'OPEN APPROVAL AGAIN',
-              },
-            }
-          : current);
-      }, 12_000);
-    } catch (error) {
-      const problem = classifyBeeperFailure(error);
-      setConnection({
-        kind: 'error',
-        message: problem.message,
-        problem,
-      });
-      if (busyOperationRef.current === busyOperation) setIsBusy(false);
-      return;
+    const normalizedToken = token.trim();
+    if (!normalizedToken) {
+      throw new Error('Create an access token in Beeper, then paste it here.');
     }
-  }, []);
+    const connected = await loadBeeper(normalizedToken, true);
+    if (connected) storeBeeperAccessToken(normalizedToken, rememberOnComputer);
+  }, [loadBeeper]);
 
   const retryConnection = useCallback(async (
-    joinConsentAccepted: boolean,
-    rememberOnComputer: boolean,
+    _joinConsentAccepted: boolean,
+    _rememberOnComputer: boolean,
   ) => {
     const token = getStoredAccessToken();
     if (token) {
@@ -1106,8 +1067,8 @@ export function useNeighborhoods(): NeighborhoodsController {
       return;
     }
     if (!(await probeBeeper())) return;
-    await connectWithOAuth(joinConsentAccepted, rememberOnComputer);
-  }, [connectWithOAuth, loadBeeper, probeBeeper]);
+    throw new Error('Create an access token in Beeper, then paste it here.');
+  }, [loadBeeper, probeBeeper]);
 
   const resetConnection = useCallback(() => {
     clearConnectedState();
@@ -1118,18 +1079,8 @@ export function useNeighborhoods(): NeighborhoodsController {
   }, [clearConnectedState]);
 
   const disconnect = useCallback(() => {
-    const token = getStoredAccessToken();
-    const revocationEndpoint = oauthEndpointsRef.current.revocation;
     disconnectBeeper();
     resetConnection();
-    if (token) {
-      void revokeBeeperAccessToken(token, revocationEndpoint).catch(() => {
-        setConnection({
-          kind: 'disconnected',
-          message: 'You’re disconnected here. Beeper was offline, so it could not confirm the sign-out.',
-        });
-      });
-    }
   }, [resetConnection]);
 
   return useMemo(
@@ -1154,13 +1105,13 @@ export function useNeighborhoods(): NeighborhoodsController {
       resolveAttachment,
       setReadEligible,
       probeBeeper,
-      connectWithOAuth,
+      connectWithToken,
       disconnect,
     }),
     [
       canLoadOlder,
       channels,
-      connectWithOAuth,
+      connectWithToken,
       connection,
       disconnect,
       isBusy,

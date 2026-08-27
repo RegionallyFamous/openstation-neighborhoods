@@ -37,7 +37,7 @@ Record the following against the immutable preview URL:
 - Desktop and mobile layout checks
 - Chrome, Safari, and Firefox results where supported by local-network access rules
 - Beeper Desktop version used for testing
-- Fresh OAuth connection and revoked/expired/invalid-token recovery
+- Fresh manual-token connection and revoked/expired/invalid-token recovery
 - Disconnected mode with Beeper closed
 - Automatic discovery and joining with a disposable test account
 - Real message load, send, unread state, and member display
@@ -55,7 +55,7 @@ Run **Promote release to production**, entering the exact SpaceFast version from
 After promotion:
 
 1. Confirm the workflow's production smoke test passed.
-2. Repeat the OAuth recovery and one read-only room-load test from `openstation.chat`.
+2. Repeat token recovery and one read-only room-load test from `openstation.chat`.
 3. Publish release notes linking the Git tag and summarizing known limitations.
 4. Store the production receipt with the release record.
 5. Watch the agreed launch signals during the release observation window.

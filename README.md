@@ -4,7 +4,7 @@ OpenStation is a Beeper Neighborhood carried by the account already inside Beepe
 
 The interface is an independent product that works with Beeper Desktop. Beeper is a third-party service and trademark; OpenStation does not operate or expose the Beeper API. See [`docs/BRANDING.md`](docs/BRANDING.md) for attribution and asset provenance.
 
-The product lives at `openstation.chat`. It detects Beeper at the pinned `127.0.0.1` Desktop API, connects through Beeper's OAuth flow, joins the OpenStation rooms after explicit consent, and reads and sends real messages. No fictional chat or member data is shown when disconnected.
+The product lives at `openstation.chat`. It detects Beeper at the pinned `127.0.0.1` Desktop API, accepts a user-created local access token, joins the OpenStation rooms after explicit consent, and reads and sends real messages. No fictional chat or member data is shown when disconnected.
 
 ![OpenStation Neighborhoods web preview](docs/screenshots/neighborhoods-desktop.png)
 
@@ -13,10 +13,10 @@ The product lives at `openstation.chat`. It detects Beeper at the pinned `127.0.
 - A responsive Discord-style interface with OpenStation/Teddy art direction
 - A disconnected onboarding shell that never pretends sample content is live
 - Automatic Beeper Desktop detection
-- OAuth 2.0 dynamic client registration with PKCE
+- A Beeper-supported local access-token connection flow
 - Automatic Matrix room joining and discovery based on the community manifest
 - Messages, unread badges, member lists, and send support
-- Unit tests for room discovery, API normalization, and OAuth PKCE
+- Unit tests for room discovery, API normalization, token storage, and legacy OAuth callback safety
 
 ## Run it
 
@@ -30,7 +30,7 @@ npm install
 npm run dev
 ```
 
-Open [http://127.0.0.1:4176](http://127.0.0.1:4176). The app opens its Beeper connection panel and does not load chat data until the local OAuth connection is approved.
+Open [http://127.0.0.1:4176](http://127.0.0.1:4176). The app opens its Beeper connection panel and does not load chat data until a local Beeper access token is supplied.
 
 Build the static web bundle with:
 
@@ -56,10 +56,12 @@ npm run check
 
 1. Keep Beeper Desktop open.
 2. In Beeper, open **Settings → Integrations** and enable the Desktop API.
-3. Open the connection panel in Neighborhoods.
-4. Accept the public-room notice, choose **Join OpenStation**, and approve the local read/write request Beeper shows.
+3. Click **+** beside **Approved connections**, name the token **OpenStation**, turn on **Allow sensitive actions**, and create it. Choose an expiry appropriate for the computer.
+4. Copy the token Beeper shows once, paste it into the Neighborhoods connection panel, and accept the public-room notice.
 
-OAuth access tokens are stored in `sessionStorage` by default and are introspected before a live session starts. A clearly labeled, opt-in **Remember me on this computer** setting stores the approval in `localStorage` so it can survive closing the tab; it should be used only on a private computer. Disconnecting, expiry, or invalid authorization clears both storage locations, and explicit disconnect also asks Beeper to revoke the grant. Neighborhoods never asks Beeper to listen beyond the loopback interface.
+The access token is stored in `sessionStorage` by default. A clearly labeled, opt-in **Remember me on this computer** setting stores it in `localStorage` so it can survive closing the tab; it should be used only on a private computer. Disconnecting, expiry, revocation, or invalid authorization clears the browser copy. The Beeper-side connection remains listed under **Approved connections** until it expires or the user revokes it there. Neighborhoods never asks Beeper to listen beyond the loopback interface.
+
+Beeper Desktop 4.3.57 requires its OAuth registration, token exchange, introspection, and revocation endpoints to be same-origin. A hosted page such as `openstation.chat` therefore cannot finish that browser OAuth flow directly. The manual access-token route is Beeper's documented fallback and keeps all authenticated API traffic between the browser and Beeper on the same computer.
 
 Do not commit tokens to this repository or put them in Vite environment variables.
 
@@ -76,7 +78,7 @@ See [`docs/MATRIX_SETUP.md`](docs/MATRIX_SETUP.md) for the one-time Beeper provi
 ```text
 Neighborhoods UI
        │
-       │ OAuth + HTTP on localhost
+       │ bearer token + HTTP on localhost
        ▼
 Beeper Desktop API
        │
@@ -91,13 +93,13 @@ The client uses serialized, visibility-aware HTTP synchronization for the select
 
 - Room provisioning is not included in the production member bundle; operators use the separate setup and governance runbooks.
 - Search, notification controls, threads, uploads, voice, and member moderation are outside the current release-candidate scope and are not presented as active controls.
-- Room joining is automatic only after the current public-room notice is accepted and Beeper authorization completes; returning sessions never silently rejoin rooms someone left.
+- Room joining is automatic only after the current public-room notice is accepted and the Beeper token is validated; returning sessions never silently rejoin rooms someone left.
 - The hosted build still talks to Beeper on the visitor's own computer. It therefore requires Beeper Desktop to be running and the browser to grant local-network access; no OpenStation server receives the Beeper token.
 
 ## Project layout
 
 - `src/community.ts` — canonical community and room manifest
-- `src/beeper/` — local API client, response normalization, and OAuth
+- `src/beeper/` — local API client, response normalization, and token/session handling
 - `src/use-neighborhoods.ts` — disconnected/live state controller
 - `src/components/` — the product interface
 - `tests/` — Vitest unit tests

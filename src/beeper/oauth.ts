@@ -52,6 +52,18 @@ export function hasStoredBeeperSession(): boolean {
   return Boolean(getStoredAccessToken());
 }
 
+export function storeBeeperAccessToken(
+  token: string,
+  rememberOnComputer = false,
+): void {
+  const normalizedToken = token.trim();
+  if (!normalizedToken) {
+    throw new Error('Paste the access token Beeper showed you first.');
+  }
+  setRememberBeeperPreference(rememberOnComputer);
+  storeAccessToken(normalizedToken, null);
+}
+
 export function isBeeperRemembered(): boolean {
   return window.localStorage.getItem(REMEMBER_BEEPER_KEY) === 'true';
 }

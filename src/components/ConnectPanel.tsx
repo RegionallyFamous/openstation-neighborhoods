@@ -11,7 +11,11 @@ interface ConnectPanelProps {
   busy: boolean;
   onClose: () => void;
   onProbe: () => Promise<boolean>;
-  onOAuth: (joinConsentAccepted: boolean, rememberOnComputer: boolean) => Promise<void>;
+  onToken: (
+    token: string,
+    joinConsentAccepted: boolean,
+    rememberOnComputer: boolean,
+  ) => Promise<void>;
   onRetry: (joinConsentAccepted: boolean, rememberOnComputer: boolean) => Promise<void>;
   onDisconnect: () => void;
 }
@@ -23,13 +27,14 @@ export function ConnectPanel({
   busy,
   onClose,
   onProbe,
-  onOAuth,
+  onToken,
   onRetry,
   onDisconnect,
 }: ConnectPanelProps) {
   const [localError, setLocalError] = useState('');
   const [joinConsent, setJoinConsent] = useState(false);
   const [rememberOnComputer, setRememberOnComputer] = useState(false);
+  const [accessToken, setAccessToken] = useState('');
   const [slowConnection, setSlowConnection] = useState(false);
   const dialogRef = useRef<HTMLElement>(null);
   const actionRunningRef = useRef(false);
@@ -125,7 +130,7 @@ export function ConnectPanel({
         return;
       }
       if (shouldProbe && !(await onProbe())) return;
-      await onOAuth(joinConsent, rememberOnComputer);
+      await onToken(accessToken, joinConsent, rememberOnComputer);
     } catch (error) {
       setLocalError(error instanceof Error ? error.message : 'The door did not open. Try once more.');
     } finally {
@@ -171,7 +176,7 @@ export function ConnectPanel({
               <img src="/assets/openstation-onboarding-hero-v2-ui.webp" alt="" />
             </div>
             <p className="connect-panel__intro">
-              Open Beeper on this computer and tap below. One quick approval, then you’re in.
+              Open Beeper on this computer, make one local pass, then paste it below.
             </p>
           </>
         )}
@@ -202,7 +207,7 @@ export function ConnectPanel({
               </span>
               <span className={connection.kind === 'authorizing' || busy ? 'is-active' : ''}>
                 <i aria-hidden="true" />
-                Pass the invite
+                Check the pass
               </span>
               <span>
                 <i aria-hidden="true" />
@@ -211,7 +216,7 @@ export function ConnectPanel({
             </div>
             {slowConnection && (
               <p className="connect-slow" role="status">
-                Still knocking. Check Beeper for an approval window.
+                Still checking. Keep Beeper open while it gathers your rooms.
               </p>
             )}
           </>
@@ -238,6 +243,35 @@ export function ConnectPanel({
           </div>
         ) : (
           <>
+            <div className="beeper-token-setup">
+              <strong>Make an OpenStation pass in Beeper</strong>
+              <p>
+                Go to <b>Settings → Integrations</b>, click <b>+</b> beside
+                {' '}<b>Approved connections</b>, name it OpenStation, and turn on
+                {' '}<b>Allow sensitive actions</b>. Create the token and copy it here.
+              </p>
+              <label htmlFor="beeper-access-token">
+                <span>Beeper access token</span>
+                <input
+                  id="beeper-access-token"
+                  type="password"
+                  value={accessToken}
+                  onChange={(event) => setAccessToken(event.target.value)}
+                  placeholder="Paste the token Beeper shows once"
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                />
+              </label>
+              <a
+                href="https://developers.beeper.com/desktop-api/auth/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Beeper’s token guide
+              </a>
+            </div>
+
             <label className="join-consent">
               <input
                 type="checkbox"
@@ -258,14 +292,17 @@ export function ConnectPanel({
               />
               <span>
                 <strong>Remember me on this computer</strong>
-                <small>Skip approval after closing this tab. Use only on a private computer.</small>
+                <small>Store this pass in the browser after closing the tab. Use only on a private computer.</small>
               </span>
             </label>
 
             <button
               className="connect-primary"
               type="button"
-              disabled={isConnecting || (!retryingSavedSession && !joinConsent)}
+              disabled={
+                isConnecting ||
+                (!retryingSavedSession && (!joinConsent || !accessToken.trim()))
+              }
               aria-busy={isConnecting}
               onClick={() => void connectBeeper()}
             >
@@ -275,15 +312,15 @@ export function ConnectPanel({
                 : connection.kind === 'unavailable'
                   ? problem?.actionLabel || 'KNOCK AGAIN'
                   : connection.kind === 'error'
-                    ? problem?.actionLabel || 'START FRESH WITH BEEPER'
+                    ? 'TRY THIS BEEPER PASS'
                     : 'LET’S GO — CONNECT BEEPER'}
             </button>
 
             <p className="connection-local-note">
               <ShieldCheck size={15} aria-hidden="true" />
               {rememberOnComputer
-                ? 'This computer remembers your Beeper approval until you disconnect or it expires.'
-                : 'Session-only: refreshing is fine; closing this tab asks again.'}
+                ? 'This browser remembers the pass until you disconnect or it expires.'
+                : 'Session-only: the pass stays in this tab and is forgotten when it closes.'}
             </p>
 
             {(connection.kind === 'unavailable' || problem?.troubleshooting) && (

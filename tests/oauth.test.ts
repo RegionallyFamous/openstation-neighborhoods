@@ -8,6 +8,7 @@ import {
   introspectBeeperAccessToken,
   invalidateBeeperAuthorization,
   revokeBeeperAccessToken,
+  storeBeeperAccessToken,
 } from '../src/beeper/oauth';
 
 describe('Beeper OAuth PKCE', () => {
@@ -96,6 +97,21 @@ describe('Beeper OAuth PKCE', () => {
 
     expect(hasStoredBeeperSession()).toBe(true);
     expect(getStoredAccessToken()).toBe('still-active-token');
+  });
+
+  it('stores a pasted Beeper token in the current tab by default', () => {
+    storeBeeperAccessToken('  pasted-token  ');
+
+    expect(sessionStorage.getItem('openstation-neighborhoods:access-token')).toBe('pasted-token');
+    expect(localStorage.getItem('openstation-neighborhoods:access-token')).toBeNull();
+  });
+
+  it('stores a pasted Beeper token only when remember is explicit', () => {
+    storeBeeperAccessToken('remembered-pasted-token', true);
+
+    expect(sessionStorage.getItem('openstation-neighborhoods:access-token')).toBeNull();
+    expect(localStorage.getItem('openstation-neighborhoods:access-token')).toBe('remembered-pasted-token');
+    expect(localStorage.getItem('openstation-neighborhoods:remember-beeper')).toBe('true');
   });
 
   it('keeps OAuth approval session-only by default', async () => {

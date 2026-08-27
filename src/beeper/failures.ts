@@ -16,6 +16,7 @@ export type BeeperFailureCode =
   | 'beeper-temporary'
   | 'invalid-response'
   | 'authorization-cancelled'
+  | 'oauth-browser-blocked'
   | 'unknown';
 
 export type BeeperRecoveryAction =
@@ -60,10 +61,10 @@ export function classifyBeeperFailure(error: unknown): BeeperFailure {
   ) {
     return failure(
       'authorization-expired',
-      'Beeper needs your okay again',
-      'The saved Beeper approval expired—usually after Beeper restarts. Approve OpenStation again and you’ll be right back.',
+      'Beeper needs a fresh pass',
+      'The saved Beeper pass expired or was revoked. Create a new OpenStation token in Beeper, then paste it here.',
       'reauthorize',
-      'APPROVE AGAIN',
+      'USE A NEW PASS',
     );
   }
 
@@ -113,11 +114,11 @@ export function classifyBeeperFailure(error: unknown): BeeperFailure {
 
   if (apiCode === 'oauth_unavailable') {
     return failure(
-      'beeper-temporary',
-      'Beeper’s approval service is not ready',
-      'Keep Beeper open, update it if an update is waiting, then try the approval again.',
+      'oauth-browser-blocked',
+      'Beeper changed browser approval',
+      'Beeper no longer lets a hosted page finish this approval flow. Create an OpenStation access token under Beeper Settings → Integrations, then paste it here.',
       'reauthorize',
-      'TRY APPROVAL AGAIN',
+      'USE A BEEPER PASS',
     );
   }
 

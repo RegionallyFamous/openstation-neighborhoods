@@ -15,7 +15,7 @@ describe('Beeper failure guidance', () => {
       error: new BeeperApiError('Invalid token', 401, 'unauthorized'),
       code: 'authorization-expired',
       action: 'reauthorize',
-      phrase: 'approval expired',
+      phrase: 'pass expired',
     },
     {
       error: new BeeperApiError('Beeper timed out', 0, 'timeout'),
@@ -52,6 +52,12 @@ describe('Beeper failure guidance', () => {
       code: 'beeper-temporary',
       action: 'retry-sync',
       phrase: 'temporary',
+    },
+    {
+      error: new BeeperApiError('Same-origin only', 403, 'oauth_unavailable'),
+      code: 'oauth-browser-blocked',
+      action: 'reauthorize',
+      phrase: 'Settings → Integrations',
     },
     {
       error: new BeeperFlowError('matrix-account-missing'),

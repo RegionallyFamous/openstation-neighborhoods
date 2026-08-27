@@ -236,7 +236,7 @@ export default function App() {
         busy={neighborhoods.isBusy}
         onClose={() => setConnectOpen(false)}
         onProbe={neighborhoods.probeBeeper}
-        onOAuth={neighborhoods.connectWithOAuth}
+        onToken={neighborhoods.connectWithToken}
         onRetry={neighborhoods.retryConnection}
         onDisconnect={neighborhoods.disconnect}
       />
